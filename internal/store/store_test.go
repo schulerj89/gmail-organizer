@@ -1,6 +1,8 @@
 package store
 
 import (
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +43,31 @@ func TestReviewStoreRecordsAudit(t *testing.T) {
 	}
 	if len(entries) != 1 || entries[0].Action != domain.ActionTrash {
 		t.Fatalf("unexpected entries: %#v", entries)
+	}
+}
+
+func TestReviewStoreReadsLargeAuditEntry(t *testing.T) {
+	store, err := NewReviewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	ids := make([]string, 0, 1000)
+	results := make([]domain.ActionResult, 0, 1000)
+	message := strings.Repeat("bulk action detail ", 8)
+	for i := 0; i < 1000; i++ {
+		id := "email-" + strconv.Itoa(i)
+		ids = append(ids, id)
+		results = append(results, domain.ActionResult{EmailID: id, Status: "failed", Message: message})
+	}
+	if err := store.RecordAction(domain.ActionMarkRead, ids, results); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	entries, err := store.RecentAudit(10)
+	if err != nil {
+		t.Fatalf("audit: %v", err)
+	}
+	if len(entries) != 1 || len(entries[0].Results) != 1000 {
+		t.Fatalf("unexpected large audit entries: %#v", entries)
 	}
 }
 

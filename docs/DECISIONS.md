@@ -22,6 +22,8 @@ Trash actions use a two-step flow: the first request returns a preview, and exec
 
 Mark-read uses Gmail batch modify requests of up to 1000 message IDs. Trash remains per-message because Gmail exposes safe trash semantics per message, while permanent batch delete is intentionally avoided.
 
+Action audit entries are JSONL and can be large for 1000-message cleanup results. Audit reads use an explicit bounded scanner buffer so large legitimate entries remain reviewable without allowing unbounded memory growth.
+
 ## Manual Review
 
 Manual category moves persist through the same local review state as classifier output. A manual move uses confidence `1.0` and a clear reason so user corrections override later low-confidence classifier output when the email is loaded again.

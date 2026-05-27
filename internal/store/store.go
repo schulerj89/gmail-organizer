@@ -14,6 +14,8 @@ import (
 	"github.com/schulerj89/gmail-organizer/internal/domain"
 )
 
+const maxAuditEntryBytes = 8 << 20
+
 type ReviewStore struct {
 	statePath string
 	auditPath string
@@ -300,6 +302,7 @@ func (s *ReviewStore) RecentAudit(limit int) ([]AuditEntry, error) {
 	defer file.Close()
 	entries := make([]AuditEntry, 0, limit)
 	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), maxAuditEntryBytes)
 	for scanner.Scan() {
 		var entry AuditEntry
 		if err := json.Unmarshal(scanner.Bytes(), &entry); err == nil {

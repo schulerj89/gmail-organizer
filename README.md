@@ -82,6 +82,7 @@ $env:GMAIL_ORGANIZER_SCAN_CACHE_LIMIT="1000"
 - Sender rules are stored locally and apply to future emails after classifier output but before per-message overrides.
 - AI scan/monitor classification is opt-in and chunked so prompts stay bounded.
 - Mark-read actions use Gmail batch modify calls of up to 1000 message IDs per request.
+- Action audit reads allow bounded large entries so 1000-message cleanup results remain reviewable.
 
 ## Verification
 
