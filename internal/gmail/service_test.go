@@ -71,3 +71,20 @@ func TestPreviewUnsubscribePreparesReviewLinks(t *testing.T) {
 		t.Fatalf("unexpected results: %#v", results)
 	}
 }
+
+func TestChunkIDsSkipsBlanksAndChunks(t *testing.T) {
+	chunks := chunkIDs([]string{"a", "", " b ", "c", "d"}, 2)
+	if len(chunks) != 2 {
+		t.Fatalf("expected two chunks, got %#v", chunks)
+	}
+	if chunks[0][0] != "a" || chunks[0][1] != "b" || chunks[1][0] != "c" || chunks[1][1] != "d" {
+		t.Fatalf("unexpected chunks: %#v", chunks)
+	}
+}
+
+func TestActionResultsForIDs(t *testing.T) {
+	results := actionResultsForIDs([]string{"a", "b"}, "marked_read", "")
+	if len(results) != 2 || results[0].EmailID != "a" || results[0].Status != "marked_read" || results[0].Message != "" {
+		t.Fatalf("unexpected results: %#v", results)
+	}
+}

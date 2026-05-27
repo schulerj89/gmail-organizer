@@ -144,13 +144,16 @@ func (s *Service) MarkRead(ctx context.Context, ids []string) ([]domain.ActionRe
 		return nil, err
 	}
 	results := make([]domain.ActionResult, 0, len(ids))
-	for _, id := range ids {
-		_, err := service.Users.Messages.Modify("me", id, &gmailapi.ModifyMessageRequest{RemoveLabelIds: []string{"UNREAD"}}).Do()
+	for _, chunk := range chunkIDs(ids, 1000) {
+		err := service.Users.Messages.BatchModify("me", &gmailapi.BatchModifyMessagesRequest{
+			Ids:            chunk,
+			RemoveLabelIds: []string{"UNREAD"},
+		}).Do()
 		if err != nil {
-			results = append(results, domain.ActionResult{EmailID: id, Status: "failed", Message: err.Error()})
+			results = append(results, actionResultsForIDs(chunk, "failed", err.Error())...)
 			continue
 		}
-		results = append(results, domain.ActionResult{EmailID: id, Status: "marked_read"})
+		results = append(results, actionResultsForIDs(chunk, "marked_read", "")...)
 	}
 	return results, nil
 }
@@ -350,4 +353,39 @@ func executeOneClickUnsubscribe(ctx context.Context, email domain.EmailSummary) 
 
 func (s *Service) String() string {
 	return fmt.Sprintf("gmail token: %s", s.tokenPath)
+}
+
+func chunkIDs(ids []string, size int) [][]string {
+	if size <= 0 {
+		size = 1000
+	}
+	chunks := [][]string{}
+	current := make([]string, 0, size)
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		current = append(current, id)
+		if len(current) == size {
+			chunks = append(chunks, current)
+			current = make([]string, 0, size)
+		}
+	}
+	if len(current) > 0 {
+		chunks = append(chunks, current)
+	}
+	return chunks
+}
+
+func actionResultsForIDs(ids []string, status string, message string) []domain.ActionResult {
+	results := make([]domain.ActionResult, 0, len(ids))
+	for _, id := range ids {
+		result := domain.ActionResult{EmailID: id, Status: status}
+		if message != "" {
+			result.Message = message
+		}
+		results = append(results, result)
+	}
+	return results
 }

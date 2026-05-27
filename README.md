@@ -22,6 +22,7 @@ This is the initial working slice. It includes:
 - Persisted review coverage metrics across scans and manual moves.
 - Reload stored category pages from prior scans for later review and cleanup.
 - Bulk trash, mark-read, and unsubscribe-preparation actions.
+- Batched Gmail mark-read updates for high-volume cleanup selections.
 - Two-step confirmation for destructive trash and one-click unsubscribe actions.
 - One-click unsubscribe execution for Gmail messages that advertise `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
 - Paged mailbox scanning for larger cleanup passes without loading the full mailbox into memory.
@@ -80,6 +81,7 @@ $env:GMAIL_ORGANIZER_SCAN_CACHE_LIMIT="1000"
 - Stored category pages preserve minimal metadata needed for later review/actions without keeping the full scan in memory.
 - Sender rules are stored locally and apply to future emails after classifier output but before per-message overrides.
 - AI scan/monitor classification is opt-in and chunked so prompts stay bounded.
+- Mark-read actions use Gmail batch modify calls of up to 1000 message IDs per request.
 
 ## Verification
 

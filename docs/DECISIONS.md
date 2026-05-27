@@ -20,6 +20,8 @@ Bulk delete initially maps to Gmail trash. Permanent deletion is intentionally d
 
 Trash actions use a two-step flow: the first request returns a preview, and execution requires a follow-up request with explicit confirmation. This keeps accidental bulk cleanup from happening on a single click while preserving a fast selected-email workflow.
 
+Mark-read uses Gmail batch modify requests of up to 1000 message IDs. Trash remains per-message because Gmail exposes safe trash semantics per message, while permanent batch delete is intentionally avoided.
+
 ## Manual Review
 
 Manual category moves persist through the same local review state as classifier output. A manual move uses confidence `1.0` and a clear reason so user corrections override later low-confidence classifier output when the email is loaded again.
