@@ -162,6 +162,38 @@ button:disabled {
   color: #9d2b1f;
 }
 
+.action-results {
+  background: #ffffff;
+  border: 1px solid #dfe4e1;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.action-result {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 110px minmax(0, 1fr) auto;
+}
+
+.action-result strong {
+  color: #1e684e;
+  font-size: 13px;
+}
+
+.action-result span,
+.action-result a {
+  font-size: 13px;
+}
+
+.action-result a {
+  color: #215e91;
+  text-decoration: none;
+}
+
 .metrics {
   display: grid;
   gap: 10px;

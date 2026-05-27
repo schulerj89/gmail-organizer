@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,7 +92,7 @@ func (s *Service) List(ctx context.Context, query string, max int64) ([]domain.E
 	for _, message := range resp.Messages {
 		item, err := service.Users.Messages.Get("me", message.Id).
 			Format("metadata").
-			MetadataHeaders("From", "Subject", "Date", "List-Unsubscribe").
+			MetadataHeaders("From", "Subject", "Date", "List-Unsubscribe", "List-Unsubscribe-Post").
 			Do()
 		if err != nil {
 			return nil, err
@@ -181,19 +184,22 @@ func toEmailSummary(message *gmailapi.Message) domain.EmailSummary {
 	}
 	receivedAt := time.UnixMilli(message.InternalDate)
 	unsubscribe := firstUnsubscribeTarget(headers["list-unsubscribe"])
+	method, canAuto := unsubscribeCapabilities(unsubscribe, headers["list-unsubscribe-post"])
 	return domain.EmailSummary{
-		ID:                message.Id,
-		ThreadID:          message.ThreadId,
-		From:              headers["from"],
-		Subject:           headers["subject"],
-		Snippet:           message.Snippet,
-		ReceivedAt:        receivedAt,
-		LabelIDs:          message.LabelIds,
-		Category:          domain.CategoryNeedsReview,
-		Confidence:        0,
-		Reason:            "Not classified yet.",
-		HasUnsubscribe:    unsubscribe != "",
-		UnsubscribeTarget: unsubscribe,
+		ID:                 message.Id,
+		ThreadID:           message.ThreadId,
+		From:               headers["from"],
+		Subject:            headers["subject"],
+		Snippet:            message.Snippet,
+		ReceivedAt:         receivedAt,
+		LabelIDs:           message.LabelIds,
+		Category:           domain.CategoryNeedsReview,
+		Confidence:         0,
+		Reason:             "Not classified yet.",
+		HasUnsubscribe:     unsubscribe != "",
+		UnsubscribeTarget:  unsubscribe,
+		UnsubscribeMethod:  method,
+		CanAutoUnsubscribe: canAuto,
 	}
 }
 
@@ -210,17 +216,51 @@ func firstUnsubscribeTarget(header string) string {
 	return ""
 }
 
+func unsubscribeCapabilities(target string, postHeader string) (string, bool) {
+	switch {
+	case target == "":
+		return "", false
+	case strings.HasPrefix(target, "mailto:"):
+		return "mailto", false
+	case oneClickPost(postHeader) && safeOneClickURL(target):
+		return "one_click_post", true
+	case strings.HasPrefix(target, "https://"):
+		return "https_review", false
+	default:
+		return "", false
+	}
+}
+
+func oneClickPost(header string) bool {
+	return strings.EqualFold(strings.TrimSpace(header), "List-Unsubscribe=One-Click")
+}
+
+func safeOneClickURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() && !ip.IsUnspecified()
+	}
+	return true
+}
+
 func DemoEmails() []domain.EmailSummary {
 	now := time.Now()
 	return []domain.EmailSummary{
-		{ID: "demo-1", ThreadID: "demo-1", From: "deals@example.com", Subject: "Last chance: 40% off", Snippet: "Use this promotion before midnight.", ReceivedAt: now.Add(-2 * time.Hour), HasUnsubscribe: true, UnsubscribeTarget: "https://example.com/unsubscribe"},
+		{ID: "demo-1", ThreadID: "demo-1", From: "deals@example.com", Subject: "Last chance: 40% off", Snippet: "Use this promotion before midnight.", ReceivedAt: now.Add(-2 * time.Hour), HasUnsubscribe: true, UnsubscribeTarget: "https://example.com/unsubscribe", UnsubscribeMethod: "https_review"},
 		{ID: "demo-2", ThreadID: "demo-2", From: "alerts@bank.example", Subject: "Security alert for your account", Snippet: "A new sign-in was detected.", ReceivedAt: now.Add(-4 * time.Hour)},
-		{ID: "demo-3", ThreadID: "demo-3", From: "news@example.com", Subject: "Weekly product digest", Snippet: "Your newsletter roundup is ready.", ReceivedAt: now.Add(-8 * time.Hour), HasUnsubscribe: true, UnsubscribeTarget: "mailto:unsubscribe@example.com"},
+		{ID: "demo-3", ThreadID: "demo-3", From: "news@example.com", Subject: "Weekly product digest", Snippet: "Your newsletter roundup is ready.", ReceivedAt: now.Add(-8 * time.Hour), HasUnsubscribe: true, UnsubscribeTarget: "mailto:unsubscribe@example.com", UnsubscribeMethod: "mailto"},
 		{ID: "demo-4", ThreadID: "demo-4", From: "store@example.com", Subject: "Your receipt", Snippet: "Thanks for your order.", ReceivedAt: now.Add(-14 * time.Hour)},
 	}
 }
 
-func UnsubscribeResults(emails []domain.EmailSummary, ids []string) []domain.ActionResult {
+func UnsubscribeResults(ctx context.Context, emails []domain.EmailSummary, ids []string) []domain.ActionResult {
 	index := map[string]domain.EmailSummary{}
 	for _, email := range emails {
 		index[email.ID] = email
@@ -232,6 +272,10 @@ func UnsubscribeResults(emails []domain.EmailSummary, ids []string) []domain.Act
 			results = append(results, domain.ActionResult{EmailID: id, Status: "skipped", Message: "No unsubscribe header was available."})
 			continue
 		}
+		if email.CanAutoUnsubscribe && email.UnsubscribeMethod == "one_click_post" {
+			results = append(results, executeOneClickUnsubscribe(ctx, email))
+			continue
+		}
 		results = append(results, domain.ActionResult{
 			EmailID:  id,
 			Status:   "prepared",
@@ -240,6 +284,34 @@ func UnsubscribeResults(emails []domain.EmailSummary, ids []string) []domain.Act
 		})
 	}
 	return results
+}
+
+func executeOneClickUnsubscribe(ctx context.Context, email domain.EmailSummary) domain.ActionResult {
+	if !safeOneClickURL(email.UnsubscribeTarget) {
+		return domain.ActionResult{EmailID: email.ID, Status: "blocked", Message: "Unsubscribe target failed safety validation."}
+	}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, email.UnsubscribeTarget, strings.NewReader("List-Unsubscribe=One-Click"))
+	if err != nil {
+		return domain.ActionResult{EmailID: email.ID, Status: "failed", Message: err.Error()}
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("List-Unsubscribe", "One-Click")
+	resp, err := client.Do(req)
+	if err != nil {
+		return domain.ActionResult{EmailID: email.ID, Status: "failed", Message: err.Error()}
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return domain.ActionResult{EmailID: email.ID, Status: "unsubscribed", Message: "One-click unsubscribe request was accepted."}
+	}
+	return domain.ActionResult{EmailID: email.ID, Status: "failed", Message: fmt.Sprintf("One-click unsubscribe returned HTTP %d.", resp.StatusCode)}
 }
 
 func (s *Service) String() string {

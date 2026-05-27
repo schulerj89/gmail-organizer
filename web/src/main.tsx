@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Archive, Bot, Check, MailCheck, RefreshCcw, Shield, Trash2, Unlink, Wifi } from "lucide-react";
 import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, getGoogleAuthURL, runAction, startMonitor, stopMonitor } from "./api";
-import type { AppConfig, Category, EmailSummary, MonitorStatus } from "./types";
+import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus } from "./types";
 import "./styles.css";
 
 const categories: { id: Category; label: string }[] = [
@@ -28,6 +28,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [monitor, setMonitor] = useState<MonitorStatus | null>(null);
+  const [actionResults, setActionResults] = useState<ActionResult[]>([]);
 
   useEffect(() => {
     void loadConfig();
@@ -129,8 +130,10 @@ function App() {
     setBusy(true);
     try {
       const result = await runAction(action, ids);
+      setActionResults(result.results);
       const preparedLinks = result.results.filter((item) => item.safeLink);
-      setNotice(`${result.results.length} action result(s). ${preparedLinks.length ? "Unsubscribe links are ready for review." : ""}`);
+      const executed = result.results.filter((item) => item.status === "unsubscribed");
+      setNotice(`${result.results.length} action result(s). ${executed.length ? `${executed.length} one-click unsubscribe request(s) accepted. ` : ""}${preparedLinks.length ? "Review links are ready below." : ""}`);
       if (action === "trash") {
         setEmails((current) => current.filter((email) => !selected.has(email.id)));
         setSelected(new Set());
@@ -193,6 +196,18 @@ function App() {
         </section>
       )}
 
+      {actionResults.length > 0 && (
+        <section className="action-results">
+          {actionResults.map((result) => (
+            <div key={`${result.emailId}-${result.status}`} className="action-result">
+              <strong>{result.status}</strong>
+              <span>{result.message || result.emailId}</span>
+              {result.safeLink && <a href={result.safeLink} target="_blank" rel="noreferrer">Open review link</a>}
+            </div>
+          ))}
+        </section>
+      )}
+
       <section className="metrics">
         <Metric label="Selected" value={selectedEmails.length} />
         <Metric label="Unsubscribe" value={emails.filter((email) => email.hasUnsubscribe).length} />
@@ -245,7 +260,7 @@ function Lane({ label, emails, selected, onToggle }: { label: string; emails: Em
             <span className="from">{email.from}</span>
             <span className="snippet">{email.snippet}</span>
             <span className="reason">{email.reason}</span>
-            {email.hasUnsubscribe && <span className="tag">unsubscribe</span>}
+            {email.hasUnsubscribe && <span className="tag">{email.canAutoUnsubscribe ? "one-click" : "unsubscribe"}</span>}
           </button>
         ))}
       </div>

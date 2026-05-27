@@ -24,6 +24,8 @@ export type EmailSummary = {
   reason: string;
   hasUnsubscribe: boolean;
   unsubscribeTarget?: string;
+  unsubscribeMethod?: string;
+  canAutoUnsubscribe: boolean;
 };
 
 export type AppConfig = {

@@ -20,7 +20,7 @@ Bulk delete initially maps to Gmail trash. Permanent deletion is intentionally d
 
 ## Unsubscribe
 
-The first implementation extracts safe `https://` and `mailto:` List-Unsubscribe targets and prepares them for review. Automatic unsubscribe requests are deferred because blindly opening remote unsubscribe links can confirm account activity to senders.
+The app extracts `https://` and `mailto:` List-Unsubscribe targets. It executes only HTTPS one-click unsubscribe requests when Gmail provides `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; ordinary HTTPS and `mailto:` targets are prepared as review links. One-click execution rejects local/private literal IP targets and does not follow redirects.
 
 ## AI Classification
 

@@ -19,18 +19,20 @@ const (
 )
 
 type EmailSummary struct {
-	ID                string    `json:"id"`
-	ThreadID          string    `json:"threadId"`
-	From              string    `json:"from"`
-	Subject           string    `json:"subject"`
-	Snippet           string    `json:"snippet"`
-	ReceivedAt        time.Time `json:"receivedAt"`
-	LabelIDs          []string  `json:"labelIds"`
-	Category          Category  `json:"category"`
-	Confidence        float64   `json:"confidence"`
-	Reason            string    `json:"reason"`
-	HasUnsubscribe    bool      `json:"hasUnsubscribe"`
-	UnsubscribeTarget string    `json:"unsubscribeTarget,omitempty"`
+	ID                 string    `json:"id"`
+	ThreadID           string    `json:"threadId"`
+	From               string    `json:"from"`
+	Subject            string    `json:"subject"`
+	Snippet            string    `json:"snippet"`
+	ReceivedAt         time.Time `json:"receivedAt"`
+	LabelIDs           []string  `json:"labelIds"`
+	Category           Category  `json:"category"`
+	Confidence         float64   `json:"confidence"`
+	Reason             string    `json:"reason"`
+	HasUnsubscribe     bool      `json:"hasUnsubscribe"`
+	UnsubscribeTarget  string    `json:"unsubscribeTarget,omitempty"`
+	UnsubscribeMethod  string    `json:"unsubscribeMethod,omitempty"`
+	CanAutoUnsubscribe bool      `json:"canAutoUnsubscribe"`
 }
 
 type Classification struct {

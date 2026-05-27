@@ -17,6 +17,7 @@ This is the initial working slice. It includes:
 - Heuristic categorization and optional OpenAI Responses API categorization.
 - Dashboard lanes by category.
 - Bulk trash, mark-read, and unsubscribe-preparation actions.
+- One-click unsubscribe execution for Gmail messages that advertise `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
 - Demo data fallback when Gmail is not authenticated.
 
 ## Setup
@@ -62,7 +63,7 @@ $env:GMAIL_ORGANIZER_MONITOR_CACHE_LIMIT="500"
 - The backend binds to `127.0.0.1` by default.
 - Email listing fetches metadata headers and snippets, not full message bodies.
 - Bulk delete uses Gmail trash, not immediate permanent deletion.
-- Unsubscribe actions are prepared for review instead of automatically opening arbitrary remote links.
+- Unsubscribe actions execute only standards-based HTTPS one-click requests; ordinary HTTPS and `mailto:` unsubscribe targets are prepared as review links.
 - API responses include secret file paths and existence status only, never secret contents.
 - Background monitoring keeps a bounded in-memory cache and uses metadata/snippets rather than full message bodies.
 

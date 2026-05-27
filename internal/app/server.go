@@ -157,7 +157,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	case domain.ActionMarkRead:
 		results, err = s.gmail.MarkRead(r.Context(), payload.IDs)
 	case domain.ActionUnsubscribe:
-		results = gmail.UnsubscribeResults(s.snapshot(), payload.IDs)
+		results = gmail.UnsubscribeResults(r.Context(), s.snapshot(), payload.IDs)
 	default:
 		err = errors.New("unsupported action")
 	}
