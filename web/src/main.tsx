@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Archive, Bot, Check, CircleHelp, Eye, Inbox, LoaderCircle, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi, X } from "lucide-react";
+import { Archive, Bot, Check, CircleHelp, Eye, Inbox, LoaderCircle, MailCheck, Moon, MoveRight, RefreshCcw, Search, Shield, Sun, Trash2, Unlink, Wifi, X } from "lucide-react";
 import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchReviewEmails, fetchReviewStats, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
 import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
 import "./styles.css";
@@ -27,6 +27,7 @@ type PendingAction = {
 };
 
 type QueueMode = "category" | "unsubscribe" | "cleanup" | "senders" | "ai";
+type ThemeMode = "light" | "dark";
 
 type SenderGroup = {
   key: string;
@@ -70,6 +71,7 @@ const dateFilters: { id: DateFilterId; label: string; query?: string; operator?:
 ];
 
 const tutorialStorageKey = "gmail-organizer:tutorial";
+const themeStorageKey = "gmail-organizer:theme";
 const aiSuggestionThreshold = 0.75;
 
 const tutorialSteps: TutorialStep[] = [
@@ -157,6 +159,7 @@ function App() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [tutorialStep, setTutorialStep] = useState<number | null>(null);
   const [loadingScreen, setLoadingScreen] = useState<{ title: string; body: string } | null>(null);
+  const [theme, setTheme] = useState<ThemeMode>(() => initialTheme());
 
   useEffect(() => {
     void loadConfig();
@@ -168,6 +171,11 @@ function App() {
       setTutorialStep(0);
     }
   }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(themeStorageKey, theme);
+  }, [theme]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -568,6 +576,10 @@ function App() {
           </div>
         </div>
         <div className="status-row">
+          <button className="theme-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            {theme === "dark" ? "Light" : "Dark"}
+          </button>
           <button className="tutorial-button" onClick={restartTutorial} title="Restart the guided dashboard tutorial"><CircleHelp size={16} />Tutorial</button>
           <span className="status-cluster" data-tour="status">
             <Status label="Gmail" active={Boolean(config?.gmailAuthenticated)} />
@@ -823,6 +835,14 @@ function localDateInputValue() {
   const now = new Date();
   const offsetMs = now.getTimezoneOffset() * 60 * 1000;
   return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
+function initialTheme(): ThemeMode {
+  const storedTheme = window.localStorage.getItem(themeStorageKey);
+  if (storedTheme === "light" || storedTheme === "dark") {
+    return storedTheme;
+  }
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 function buildGmailQuery(dateFilter: DateFilterId, customDate: string, extraTerms: string) {
