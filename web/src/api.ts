@@ -29,10 +29,10 @@ export async function classifyEmails(emails: EmailSummary[], useAI: boolean) {
   });
 }
 
-export async function updateCategories(ids: string[], category: string) {
+export async function updateCategories(ids: string[], category: string, applySenderRule: boolean) {
   return request<{ emails: EmailSummary[] }>("/api/categories", {
     method: "POST",
-    body: JSON.stringify({ ids, category })
+    body: JSON.stringify({ ids, category, applySenderRule })
   });
 }
 

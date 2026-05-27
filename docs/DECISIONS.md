@@ -22,6 +22,10 @@ Bulk delete initially maps to Gmail trash. Permanent deletion is intentionally d
 
 Manual category moves persist through the same local review state as classifier output. A manual move uses confidence `1.0` and a clear reason so user corrections override later low-confidence classifier output when the email is loaded again.
 
+## Sender Rules
+
+Manual category moves can save a sender rule. Sender rules are local-only, apply after heuristic or AI classification, and run before per-message review-state overrides. This lets monitoring and scan jobs auto-categorize future emails from a known sender while preserving explicit corrections for individual messages.
+
 ## Coverage Metrics
 
 Review coverage is calculated from the local classification state, not from Gmail message bodies. This gives the dashboard a stable count of persisted categorization progress across paged scans, manual moves, and future monitoring runs while keeping memory and data exposure bounded.

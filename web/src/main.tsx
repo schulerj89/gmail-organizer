@@ -26,6 +26,7 @@ function App() {
   const [max, setMax] = useState(50);
   const [scanLimit, setScanLimit] = useState(1000);
   const [targetCategory, setTargetCategory] = useState<Category>("needs_review");
+  const [applySenderRule, setApplySenderRule] = useState(true);
   const [source, setSource] = useState("demo");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -200,11 +201,11 @@ function App() {
     }
     setBusy(true);
     try {
-      const result = await updateCategories(ids, targetCategory);
+      const result = await updateCategories(ids, targetCategory, applySenderRule);
       setEmails(result.emails);
       setSelected(new Set());
       await refreshReviewStats();
-      setNotice(`${ids.length} email(s) moved to ${categoryLabel(targetCategory)}.`);
+      setNotice(`${ids.length} email(s) moved to ${categoryLabel(targetCategory)}.${applySenderRule ? " Sender rule saved." : ""}`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Category update failed.");
     } finally {
@@ -259,6 +260,10 @@ function App() {
           <select value={targetCategory} onChange={(event) => setTargetCategory(event.target.value as Category)} aria-label="Target category">
             {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
           </select>
+          <label className="inline-toggle">
+            <input type="checkbox" checked={applySenderRule} onChange={(event) => setApplySenderRule(event.target.checked)} />
+            Sender
+          </label>
           <button onClick={moveSelected} disabled={busy || selected.size === 0}><MoveRight size={16} />Move</button>
           <button onClick={() => bulk("mark_read")} disabled={busy}><MailCheck size={16} />Read</button>
           <button onClick={() => bulk("unsubscribe")} disabled={busy}><Unlink size={16} />Unsubscribe</button>
@@ -302,6 +307,10 @@ function App() {
           <div>
             <span>Manual moves</span>
             <strong>{reviewStats.manual}</strong>
+          </div>
+          <div>
+            <span>Sender rules</span>
+            <strong>{reviewStats.senderRules}</strong>
           </div>
           <div>
             <span>Reviewed</span>

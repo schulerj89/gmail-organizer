@@ -3,8 +3,10 @@ package store
 import (
 	"bufio"
 	"encoding/json"
+	"net/mail"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 type ReviewStore struct {
 	statePath string
 	auditPath string
+	rulesPath string
 	mu        sync.Mutex
 }
 
@@ -36,8 +39,15 @@ type ReviewStats struct {
 	Total       int                     `json:"total"`
 	Manual      int                     `json:"manual"`
 	NeedsReview int                     `json:"needsReview"`
+	SenderRules int                     `json:"senderRules"`
 	ByCategory  map[domain.Category]int `json:"byCategory"`
 	UpdatedAt   *time.Time              `json:"updatedAt,omitempty"`
+}
+
+type SenderRule struct {
+	Sender    string          `json:"sender"`
+	Category  domain.Category `json:"category"`
+	UpdatedAt time.Time       `json:"updatedAt"`
 }
 
 func NewReviewStore(dataDir string) (*ReviewStore, error) {
@@ -47,6 +57,7 @@ func NewReviewStore(dataDir string) (*ReviewStore, error) {
 	return &ReviewStore{
 		statePath: filepath.Join(dataDir, "review_state.json"),
 		auditPath: filepath.Join(dataDir, "action_audit.jsonl"),
+		rulesPath: filepath.Join(dataDir, "sender_rules.json"),
 	}, nil
 }
 
@@ -61,6 +72,24 @@ func (s *ReviewStore) Apply(emails []domain.EmailSummary) []domain.EmailSummary 
 			email.Category = saved.Category
 			email.Confidence = saved.Confidence
 			email.Reason = saved.Reason
+		}
+		out = append(out, email)
+	}
+	return out
+}
+
+func (s *ReviewStore) ApplySenderRules(emails []domain.EmailSummary) []domain.EmailSummary {
+	rules, err := s.loadRules()
+	if err != nil || len(rules) == 0 {
+		return emails
+	}
+	out := make([]domain.EmailSummary, 0, len(emails))
+	for _, email := range emails {
+		sender := normalizeSender(email.From)
+		if rule, ok := rules[sender]; ok {
+			email.Category = rule.Category
+			email.Confidence = 1
+			email.Reason = "Sender rule."
 		}
 		out = append(out, email)
 	}
@@ -94,6 +123,32 @@ func (s *ReviewStore) SaveClassifications(emails []domain.EmailSummary) error {
 	return os.WriteFile(s.statePath, raw, 0o600)
 }
 
+func (s *ReviewStore) SaveSenderRules(emails []domain.EmailSummary, category domain.Category) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rules, err := s.loadRulesLocked()
+	if err != nil {
+		rules = map[string]SenderRule{}
+	}
+	now := time.Now().UTC()
+	for _, email := range emails {
+		sender := normalizeSender(email.From)
+		if sender == "" {
+			continue
+		}
+		rules[sender] = SenderRule{
+			Sender:    sender,
+			Category:  category,
+			UpdatedAt: now,
+		}
+	}
+	raw, err := json.MarshalIndent(rules, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.rulesPath, raw, 0o600)
+}
+
 func (s *ReviewStore) RecordAction(action domain.BulkAction, ids []string, results []domain.ActionResult) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -115,13 +170,20 @@ func (s *ReviewStore) Stats() (ReviewStats, error) {
 	state, err := s.loadState()
 	if err != nil {
 		if os.IsNotExist(err) {
-			return ReviewStats{ByCategory: map[domain.Category]int{}}, nil
+			stats := ReviewStats{ByCategory: map[domain.Category]int{}}
+			if rules, rulesErr := s.loadRules(); rulesErr == nil {
+				stats.SenderRules = len(rules)
+			}
+			return stats, nil
 		}
 		return ReviewStats{}, err
 	}
 	stats := ReviewStats{
 		Total:      len(state),
 		ByCategory: map[domain.Category]int{},
+	}
+	if rules, err := s.loadRules(); err == nil {
+		stats.SenderRules = len(rules)
 	}
 	var latest time.Time
 	for _, item := range state {
@@ -189,4 +251,34 @@ func (s *ReviewStore) loadStateLocked() (map[string]StoredClassification, error)
 		return nil, err
 	}
 	return state, nil
+}
+
+func (s *ReviewStore) loadRules() (map[string]SenderRule, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loadRulesLocked()
+}
+
+func (s *ReviewStore) loadRulesLocked() (map[string]SenderRule, error) {
+	raw, err := os.ReadFile(s.rulesPath)
+	if err != nil {
+		return nil, err
+	}
+	var rules map[string]SenderRule
+	if err := json.Unmarshal(raw, &rules); err != nil {
+		return nil, err
+	}
+	return rules, nil
+}
+
+func normalizeSender(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if parsed, err := mail.ParseAddress(value); err == nil {
+		return strings.ToLower(strings.TrimSpace(parsed.Address))
+	}
+	value = strings.Trim(value, "<>")
+	return strings.ToLower(strings.TrimSpace(value))
 }

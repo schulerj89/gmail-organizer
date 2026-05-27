@@ -70,3 +70,31 @@ func TestReviewStoreStats(t *testing.T) {
 		t.Fatal("expected updated timestamp")
 	}
 }
+
+func TestReviewStoreAppliesSenderRules(t *testing.T) {
+	store, err := NewReviewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	if err := store.SaveSenderRules([]domain.EmailSummary{{From: "Deals <deals@example.com>"}}, domain.CategoryUnwanted); err != nil {
+		t.Fatalf("save rule: %v", err)
+	}
+	applied := store.ApplySenderRules([]domain.EmailSummary{{
+		ID:       "email-1",
+		From:     "deals@example.com",
+		Category: domain.CategoryPromotions,
+	}})
+	if got := applied[0].Category; got != domain.CategoryUnwanted {
+		t.Fatalf("expected unwanted, got %s", got)
+	}
+	if applied[0].Reason != "Sender rule." || applied[0].Confidence != 1 {
+		t.Fatalf("expected sender rule confidence/reason, got %#v", applied[0])
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if stats.SenderRules != 1 {
+		t.Fatalf("expected one sender rule, got %d", stats.SenderRules)
+	}
+}

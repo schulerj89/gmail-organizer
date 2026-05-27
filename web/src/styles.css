@@ -103,6 +103,23 @@ select {
   width: 96px;
 }
 
+.inline-toggle {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cfd8d5;
+  border-radius: 6px;
+  color: #435057;
+  display: inline-flex;
+  gap: 6px;
+  height: 38px;
+  padding: 0 10px;
+}
+
+.inline-toggle input {
+  height: auto;
+  padding: 0;
+}
+
 button {
   align-items: center;
   background: #ffffff;
@@ -203,7 +220,7 @@ button:disabled {
 .coverage-panel {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   margin-bottom: 12px;
 }
 

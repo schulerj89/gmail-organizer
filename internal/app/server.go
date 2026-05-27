@@ -144,8 +144,9 @@ func (s *Server) handleClassify(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCategoryUpdate(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
-		IDs      []string        `json:"ids"`
-		Category domain.Category `json:"category"`
+		IDs             []string        `json:"ids"`
+		Category        domain.Category `json:"category"`
+		ApplySenderRule bool            `json:"applySenderRule"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -167,6 +168,12 @@ func (s *Server) handleCategoryUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SaveClassifications(emails); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if payload.ApplySenderRule {
+		if err := s.store.SaveSenderRules(emails, payload.Category); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"emails": s.snapshot()})
 }
@@ -270,6 +277,7 @@ func (s *Server) fetchAndClassify(ctx context.Context, query string, max int64, 
 		source = "demo"
 	}
 	classified := s.applyClassifications(ctx, emails, preferAI)
+	classified = s.store.ApplySenderRules(classified)
 	classified = s.store.Apply(classified)
 	s.remember(classified)
 	return classified, source, nil
@@ -287,6 +295,7 @@ func (s *Server) fetchPageAndClassify(ctx context.Context, query string, pageTok
 		source = "demo"
 	}
 	classified := s.applyClassifications(ctx, emails, preferAI)
+	classified = s.store.ApplySenderRules(classified)
 	classified = s.store.Apply(classified)
 	s.remember(classified)
 	return classified, nextToken, source, nil

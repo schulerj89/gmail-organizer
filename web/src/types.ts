@@ -73,6 +73,7 @@ export type ReviewStats = {
   total: number;
   manual: number;
   needsReview: number;
+  senderRules: number;
   byCategory: Partial<Record<Category, number>>;
   updatedAt?: string;
 };
