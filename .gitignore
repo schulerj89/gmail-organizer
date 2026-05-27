@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+bin/
+dist/
+node_modules/
+coverage/
+data/
+*.tsbuildinfo
+*.log
+*.tmp
+token.json

@@ -1,0 +1,240 @@
+package app
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/schulerj89/gmail-organizer/internal/classifier"
+	"github.com/schulerj89/gmail-organizer/internal/config"
+	"github.com/schulerj89/gmail-organizer/internal/domain"
+	"github.com/schulerj89/gmail-organizer/internal/gmail"
+	"github.com/schulerj89/gmail-organizer/internal/secrets"
+)
+
+type Server struct {
+	cfg        config.Config
+	gmail      *gmail.Service
+	heuristic  classifier.Classifier
+	ai         classifier.Classifier
+	lastEmails []domain.EmailSummary
+	state      string
+	mu         sync.RWMutex
+}
+
+func NewServer(cfg config.Config) (*Server, error) {
+	googleSecret := secrets.FileSecret{Path: cfg.GoogleClientSecretFile}
+	gmailService, err := gmail.NewService(context.Background(), googleSecret, cfg.DataDir, cfg.OAuthRedirectURL())
+	if err != nil {
+		return nil, err
+	}
+	return &Server{
+		cfg:       cfg,
+		gmail:     gmailService,
+		heuristic: classifier.NewHeuristicClassifier(),
+		ai:        classifier.NewOpenAIResponsesClassifier(secrets.FileSecret{Path: cfg.OpenAIKeyFile}, cfg.OpenAIModel),
+		state:     randomState(),
+	}, nil
+}
+
+func (s *Server) Routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("GET /api/config", s.handleConfig)
+	mux.HandleFunc("GET /api/auth/google/url", s.handleGoogleAuthURL)
+	mux.HandleFunc("GET /api/auth/google/callback", s.handleGoogleCallback)
+	mux.HandleFunc("GET /api/emails", s.handleEmails)
+	mux.HandleFunc("POST /api/classify", s.handleClassify)
+	mux.HandleFunc("POST /api/actions", s.handleAction)
+	mux.Handle("/", s.staticHandler())
+	return withSecurityHeaders(mux)
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"gmailAuthenticated": s.gmail.Authenticated(),
+		"googleClientSecret": secrets.FileSecret{Path: s.cfg.GoogleClientSecretFile}.SafeStatus(),
+		"openAIKey":          secrets.FileSecret{Path: s.cfg.OpenAIKeyFile}.SafeStatus(),
+		"openAIModel":        s.cfg.OpenAIModel,
+		"openAIEnabled":      s.cfg.EnableOpenAI,
+	})
+}
+
+func (s *Server) handleGoogleAuthURL(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"url": s.gmail.AuthURL(s.state)})
+}
+
+func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("state") != s.state {
+		writeError(w, http.StatusBadRequest, "invalid oauth state")
+		return
+	}
+	if err := s.gmail.Exchange(r.Context(), r.URL.Query().Get("code")); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte("<!doctype html><title>Gmail Organizer</title><p>Gmail authorization saved. You can close this tab and return to the app.</p>"))
+}
+
+func (s *Server) handleEmails(w http.ResponseWriter, r *http.Request) {
+	max := int64FromQuery(r, "max", 50)
+	query := strings.TrimSpace(r.URL.Query().Get("query"))
+	emails, err := s.gmail.List(r.Context(), query, max)
+	source := "gmail"
+	if err != nil {
+		emails = gmail.DemoEmails()
+		source = "demo"
+	}
+	classified := s.applyClassifications(r.Context(), emails, false)
+	s.remember(classified)
+	writeJSON(w, http.StatusOK, map[string]any{"source": source, "emails": classified})
+}
+
+func (s *Server) handleClassify(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Emails []domain.EmailSummary `json:"emails"`
+		UseAI  bool                  `json:"useAI"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(payload.Emails) == 0 {
+		payload.Emails = s.snapshot()
+	}
+	classified := s.applyClassifications(r.Context(), payload.Emails, payload.UseAI)
+	s.remember(classified)
+	writeJSON(w, http.StatusOK, map[string]any{"emails": classified})
+}
+
+func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Action domain.BulkAction `json:"action"`
+		IDs    []string          `json:"ids"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(payload.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "no email ids were provided")
+		return
+	}
+	var (
+		results []domain.ActionResult
+		err     error
+	)
+	switch payload.Action {
+	case domain.ActionTrash:
+		results, err = s.gmail.Trash(r.Context(), payload.IDs)
+	case domain.ActionMarkRead:
+		results, err = s.gmail.MarkRead(r.Context(), payload.IDs)
+	case domain.ActionUnsubscribe:
+		results = gmail.UnsubscribeResults(s.snapshot(), payload.IDs)
+	default:
+		err = errors.New("unsupported action")
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+func (s *Server) applyClassifications(ctx context.Context, emails []domain.EmailSummary, preferAI bool) []domain.EmailSummary {
+	classifications, _ := s.heuristic.Classify(ctx, emails)
+	if preferAI && s.cfg.EnableOpenAI && (secrets.FileSecret{Path: s.cfg.OpenAIKeyFile}).Exists() {
+		if aiClassifications, aiErr := s.ai.Classify(ctx, emails); aiErr == nil {
+			classifications = aiClassifications
+		}
+	}
+	byID := map[string]domain.Classification{}
+	for _, item := range classifications {
+		byID[item.EmailID] = item
+	}
+	out := make([]domain.EmailSummary, 0, len(emails))
+	for _, email := range emails {
+		if classification, ok := byID[email.ID]; ok {
+			email.Category = classification.Category
+			email.Confidence = classification.Confidence
+			email.Reason = classification.Reason
+		}
+		out = append(out, email)
+	}
+	return out
+}
+
+func (s *Server) remember(emails []domain.EmailSummary) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastEmails = append([]domain.EmailSummary(nil), emails...)
+}
+
+func (s *Server) snapshot() []domain.EmailSummary {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]domain.EmailSummary(nil), s.lastEmails...)
+}
+
+func (s *Server) staticHandler() http.Handler {
+	if _, err := os.Stat(filepath.Join(s.cfg.FrontendDistDir, "index.html")); err == nil {
+		return http.FileServer(http.Dir(s.cfg.FrontendDistDir))
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"message": "Frontend is not built yet. Run npm install && npm run build in web/."})
+	})
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func int64FromQuery(r *http.Request, key string, fallback int64) int64 {
+	value := strings.TrimSpace(r.URL.Query().Get(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func randomState() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 10)
+	}
+	return hex.EncodeToString(raw[:])
+}
+
+func withSecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		next.ServeHTTP(w, r)
+	})
+}
