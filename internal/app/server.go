@@ -19,6 +19,7 @@ import (
 	"github.com/schulerj89/gmail-organizer/internal/domain"
 	"github.com/schulerj89/gmail-organizer/internal/gmail"
 	"github.com/schulerj89/gmail-organizer/internal/secrets"
+	"github.com/schulerj89/gmail-organizer/internal/store"
 )
 
 type Server struct {
@@ -26,6 +27,7 @@ type Server struct {
 	gmail      *gmail.Service
 	heuristic  classifier.Classifier
 	ai         classifier.Classifier
+	store      *store.ReviewStore
 	lastEmails []domain.EmailSummary
 	state      string
 	mu         sync.RWMutex
@@ -37,11 +39,16 @@ func NewServer(cfg config.Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	reviewStore, err := store.NewReviewStore(cfg.DataDir)
+	if err != nil {
+		return nil, err
+	}
 	return &Server{
 		cfg:       cfg,
 		gmail:     gmailService,
 		heuristic: classifier.NewHeuristicClassifier(),
 		ai:        classifier.NewOpenAIResponsesClassifier(secrets.FileSecret{Path: cfg.OpenAIKeyFile}, cfg.OpenAIModel),
+		store:     reviewStore,
 		state:     randomState(),
 	}, nil
 }
@@ -55,6 +62,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/emails", s.handleEmails)
 	mux.HandleFunc("POST /api/classify", s.handleClassify)
 	mux.HandleFunc("POST /api/actions", s.handleAction)
+	mux.HandleFunc("GET /api/audit", s.handleAudit)
 	mux.Handle("/", s.staticHandler())
 	return withSecurityHeaders(mux)
 }
@@ -100,6 +108,7 @@ func (s *Server) handleEmails(w http.ResponseWriter, r *http.Request) {
 		source = "demo"
 	}
 	classified := s.applyClassifications(r.Context(), emails, false)
+	classified = s.store.Apply(classified)
 	s.remember(classified)
 	writeJSON(w, http.StatusOK, map[string]any{"source": source, "emails": classified})
 }
@@ -117,6 +126,7 @@ func (s *Server) handleClassify(w http.ResponseWriter, r *http.Request) {
 		payload.Emails = s.snapshot()
 	}
 	classified := s.applyClassifications(r.Context(), payload.Emails, payload.UseAI)
+	_ = s.store.SaveClassifications(classified)
 	s.remember(classified)
 	writeJSON(w, http.StatusOK, map[string]any{"emails": classified})
 }
@@ -152,7 +162,17 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	_ = s.store.RecordAction(payload.Action, payload.IDs, results)
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
+	entries, err := s.store.RecentAudit(int(int64FromQuery(r, "limit", 50)))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
 }
 
 func (s *Server) applyClassifications(ctx context.Context, emails []domain.EmailSummary, preferAI bool) []domain.EmailSummary {
