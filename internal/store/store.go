@@ -153,6 +153,26 @@ func (s *ReviewStore) SaveClassifications(emails []domain.EmailSummary) error {
 	return os.WriteFile(s.statePath, raw, 0o600)
 }
 
+func (s *ReviewStore) DeleteClassifications(ids []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, err := s.loadStateLocked()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, id := range ids {
+		delete(state, strings.TrimSpace(id))
+	}
+	raw, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.statePath, raw, 0o600)
+}
+
 func (s *ReviewStore) ListEmails(category domain.Category, limit int, offset int) (StoredEmailPage, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100

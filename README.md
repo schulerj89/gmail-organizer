@@ -80,6 +80,7 @@ $env:GMAIL_ORGANIZER_SCAN_CACHE_LIMIT="1000"
 - Mailbox scans fetch Gmail metadata in pages, persist classifications after each batch, and keep only a bounded recent cache in memory.
 - Review coverage stats are derived from local classification state and do not require reloading message bodies.
 - Stored category pages preserve minimal metadata needed for later review/actions without keeping the full scan in memory.
+- Successfully trashed messages are removed from local review state after the action is audited.
 - Sender rules are stored locally and apply to future emails after classifier output but before per-message overrides.
 - AI scan/monitor classification is opt-in and chunked so prompts stay bounded.
 - Mark-read actions use Gmail batch modify calls of up to 1000 message IDs per request.

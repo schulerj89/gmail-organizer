@@ -80,6 +80,28 @@ func TestNormalizeIDsDeduplicatesAndSkipsBlanks(t *testing.T) {
 	}
 }
 
+func TestSuccessfulActionIDs(t *testing.T) {
+	got := successfulActionIDs([]domain.ActionResult{
+		{EmailID: "a", Status: "trashed"},
+		{EmailID: "b", Status: "failed"},
+		{EmailID: "", Status: "trashed"},
+		{EmailID: "c", Status: "trashed"},
+	}, "trashed")
+	if len(got) != 2 || got[0] != "a" || got[1] != "c" {
+		t.Fatalf("unexpected ids: %#v", got)
+	}
+}
+
+func TestForgetRemovesRememberedEmails(t *testing.T) {
+	server := &Server{}
+	server.remember([]domain.EmailSummary{{ID: "a"}, {ID: "b"}, {ID: "c"}})
+	server.forget([]string{"b"})
+	got := server.snapshot()
+	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "c" {
+		t.Fatalf("unexpected snapshot: %#v", got)
+	}
+}
+
 func TestConfirmationTokenMatchesActionAndIDsOnce(t *testing.T) {
 	server := &Server{}
 	token, expiresAt := server.createConfirmation(domain.ActionTrash, []string{"a", "b"})

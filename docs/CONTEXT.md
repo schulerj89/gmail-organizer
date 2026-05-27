@@ -21,6 +21,7 @@ Build a secure, memory-efficient Gmail AI organizer that categorizes emails, mon
 - Mark-read uses Gmail batch modify requests to reduce API calls during large cleanup selections.
 - Action audit reads support bounded large JSONL entries for 1000-message cleanup results.
 - Mutating API requests are guarded against non-local browser origins.
+- Successfully trashed messages are pruned from local review state after the audit entry is recorded.
 - Credentials: referenced from files outside the repo:
   - Google OAuth client secret: `GOOGLE_CLIENT_SECRET_FILE`
   - OpenAI key: `OPENAI_API_KEY_FILE`

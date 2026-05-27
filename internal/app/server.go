@@ -250,6 +250,13 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.store.RecordAction(payload.Action, ids, results)
+	if payload.Action == domain.ActionTrash {
+		trashedIDs := successfulActionIDs(results, "trashed")
+		if len(trashedIDs) > 0 {
+			_ = s.store.DeleteClassifications(trashedIDs)
+			s.forget(trashedIDs)
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"results": results, "requiresConfirmation": false})
 }
 
@@ -442,6 +449,23 @@ func (s *Server) snapshot() []domain.EmailSummary {
 	return append([]domain.EmailSummary(nil), s.lastEmails...)
 }
 
+func (s *Server) forget(ids []string) {
+	selected := map[string]struct{}{}
+	for _, id := range ids {
+		selected[id] = struct{}{}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	kept := s.lastEmails[:0]
+	for _, email := range s.lastEmails {
+		if _, ok := selected[email.ID]; ok {
+			continue
+		}
+		kept = append(kept, email)
+	}
+	s.lastEmails = append([]domain.EmailSummary(nil), kept...)
+}
+
 func (s *Server) updateCategories(ids []string, category domain.Category) []domain.EmailSummary {
 	selected := map[string]struct{}{}
 	for _, id := range ids {
@@ -490,6 +514,16 @@ func requiresConfirmation(results []domain.ActionResult) bool {
 		}
 	}
 	return false
+}
+
+func successfulActionIDs(results []domain.ActionResult, status string) []string {
+	ids := []string{}
+	for _, result := range results {
+		if result.Status == status && strings.TrimSpace(result.EmailID) != "" {
+			ids = append(ids, result.EmailID)
+		}
+	}
+	return ids
 }
 
 func (s *Server) createConfirmation(action domain.BulkAction, ids []string) (string, time.Time) {

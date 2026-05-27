@@ -146,6 +146,37 @@ func TestReviewStoreListsStoredEmailsByCategory(t *testing.T) {
 	}
 }
 
+func TestReviewStoreDeleteClassifications(t *testing.T) {
+	store, err := NewReviewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	emails := []domain.EmailSummary{
+		{ID: "email-1", Category: domain.CategoryUnwanted},
+		{ID: "email-2", Category: domain.CategoryUnwanted},
+	}
+	if err := store.SaveClassifications(emails); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := store.DeleteClassifications([]string{"email-1"}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	page, err := store.ListEmails(domain.CategoryUnwanted, 10, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if page.Total != 1 || page.Emails[0].ID != "email-2" {
+		t.Fatalf("unexpected page after delete: %#v", page)
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if stats.Total != 1 {
+		t.Fatalf("expected one remaining classification, got %#v", stats)
+	}
+}
+
 func TestReviewStoreListEmailsPaginates(t *testing.T) {
 	store, err := NewReviewStore(t.TempDir())
 	if err != nil {
