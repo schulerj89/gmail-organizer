@@ -266,11 +266,14 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	if payload.Action == domain.ActionTrash {
 		trashedIDs := successfulActionIDs(results, "trashed")
 		if len(trashedIDs) > 0 {
-			_ = s.store.DeleteClassifications(trashedIDs)
+			if err := s.store.DeleteClassifications(trashedIDs); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
 			s.forget(trashedIDs)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"results": results, "requiresConfirmation": false, "summary": summarizeActionResults(results)})
+	writeJSON(w, http.StatusOK, map[string]any{"results": results, "requiresConfirmation": false, "summary": summarizeActionResults(results), "emails": s.snapshot()})
 }
 
 func (s *Server) previewAction(action domain.BulkAction, ids []string) ([]domain.ActionResult, error) {

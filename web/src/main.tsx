@@ -407,6 +407,9 @@ function App() {
       const result = await runAction(action, ids);
       setActionResults(result.results);
       setActionSummary(result.summary ?? summarizeActionResults(result.results));
+      if (result.emails) {
+        setEmails(result.emails);
+      }
       if (result.requiresConfirmation && (action === "trash" || action === "unsubscribe")) {
         if (!result.confirmationToken) {
           throw new Error("Server did not return a confirmation token.");
@@ -434,6 +437,9 @@ function App() {
       setActionResults(result.results);
       setActionSummary(summary);
       finishAction(pendingAction.action, result.results, summary);
+      if (result.emails) {
+        setEmails(result.emails);
+      }
       setPendingAction(null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Bulk action failed.");
@@ -471,6 +477,7 @@ function App() {
       if (detailEmailId && trashed.has(detailEmailId)) {
         setDetailEmailId(null);
       }
+      void refreshReviewStats();
     }
   }
 

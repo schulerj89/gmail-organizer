@@ -106,6 +106,7 @@ export type ActionResponse = {
   results: ActionResult[];
   requiresConfirmation: boolean;
   summary?: ActionSummary;
+  emails?: EmailSummary[];
   confirmationToken?: string;
   confirmationExpiresAt?: string;
 };
