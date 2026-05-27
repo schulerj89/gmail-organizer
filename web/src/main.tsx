@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Archive, Bot, Check, CircleHelp, Database, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
+import { Archive, Bot, Check, CircleHelp, Database, LoaderCircle, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
 import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchReviewEmails, fetchReviewStats, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
 import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
 import "./styles.css";
@@ -101,6 +101,7 @@ function App() {
   const [actionResults, setActionResults] = useState<ActionResult[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [tutorialStep, setTutorialStep] = useState<number | null>(null);
+  const [loadingScreen, setLoadingScreen] = useState<{ title: string; body: string } | null>(null);
 
   useEffect(() => {
     void loadConfig();
@@ -222,6 +223,12 @@ function App() {
 
   async function classify(useAI: boolean) {
     setBusy(true);
+    if (useAI) {
+      setLoadingScreen({
+        title: "AI categorization running",
+        body: `Reviewing ${emails.length} visible email(s) with bounded OpenAI chunks. This can take a moment while the backend respects token and retry limits.`
+      });
+    }
     try {
       const result = await classifyEmails(emails, useAI);
       setEmails(result.emails);
@@ -230,6 +237,7 @@ function App() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Classification failed.");
     } finally {
+      setLoadingScreen(null);
       setBusy(false);
     }
   }
@@ -401,7 +409,7 @@ function App() {
           <p>{sourceLabel(source)} - {emails.length} emails - {selected.size} selected</p>
         </div>
         <div className="status-row">
-          <button className="tutorial-button" onClick={restartTutorial}><CircleHelp size={16} />Tutorial</button>
+          <button className="tutorial-button" onClick={restartTutorial} title="Restart the guided dashboard tutorial"><CircleHelp size={16} />Tutorial</button>
           <span className="status-cluster" data-tour="status">
             <Status label="Gmail" active={Boolean(config?.gmailAuthenticated)} />
             <Status label="OpenAI" active={Boolean(config?.openAIKey.exists && config.openAIEnabled)} />
@@ -412,43 +420,43 @@ function App() {
 
       <section className="toolbar">
         <div className="query-group" data-tour="query">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Gmail query" />
-          <input className="max-input" type="number" min={1} max={200} value={max} onChange={(event) => setMax(Number(event.target.value))} aria-label="Max emails" />
-          <input className="scan-input" type="number" min={100} max={10000} value={scanLimit} onChange={(event) => setScanLimit(Number(event.target.value))} aria-label="Scan limit" />
-          <button onClick={loadEmails} disabled={busy}><RefreshCcw size={16} />Refresh</button>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Gmail query" title="Gmail search query used for the visible review page" />
+          <input className="max-input" type="number" min={1} max={200} value={max} onChange={(event) => setMax(Number(event.target.value))} aria-label="Max emails" title="Number of emails to load into the visible page" />
+          <input className="scan-input" type="number" min={100} max={10000} value={scanLimit} onChange={(event) => setScanLimit(Number(event.target.value))} aria-label="Scan limit" title="Maximum emails for the background scan to classify and store" />
+          <button onClick={loadEmails} disabled={busy} title="Reload the visible page from Gmail or stored review state"><RefreshCcw size={16} />Refresh</button>
           <span className="inline-toolset" data-tour="scan-monitor">
-            <button className={scan?.running ? "monitoring" : ""} onClick={toggleScan} disabled={busy}><Search size={16} />Scan</button>
-            <button className={monitor?.running ? "monitoring" : ""} onClick={toggleMonitor} disabled={busy}><Wifi size={16} />Monitor</button>
-            <label className="inline-toggle">
+            <button className={scan?.running ? "monitoring" : ""} onClick={toggleScan} disabled={busy} title="Start or stop a larger Gmail scan that stores classifications in SQLite"><Search size={16} />Scan</button>
+            <button className={monitor?.running ? "monitoring" : ""} onClick={toggleMonitor} disabled={busy} title="Start or stop polling for new Gmail messages"><Wifi size={16} />Monitor</button>
+            <label className="inline-toggle" title="Use OpenAI for scan and monitor jobs when enabled">
               <input type="checkbox" checked={useAIForJobs} onChange={(event) => setUseAIForJobs(event.target.checked)} />
               AI jobs
             </label>
           </span>
-          <button onClick={authorizeGmail}><Shield size={16} />Authorize</button>
+          <button onClick={authorizeGmail} title="Open the Gmail OAuth authorization flow"><Shield size={16} />Authorize</button>
         </div>
         <div className="action-group">
           <span className="inline-toolset" data-tour="categorize">
-            <button onClick={() => classify(false)} disabled={busy || emails.length === 0}><Archive size={16} />Categorize</button>
-            <button onClick={() => classify(true)} disabled={busy || emails.length === 0}><Bot size={16} />AI Categorize</button>
+            <button onClick={() => classify(false)} disabled={busy || emails.length === 0} title="Categorize the visible emails with local rules"><Archive size={16} />Categorize</button>
+            <button onClick={() => classify(true)} disabled={busy || emails.length === 0} title="Categorize the visible emails with OpenAI using bounded chunks"><Bot size={16} />AI Categorize</button>
           </span>
-          <select value={targetCategory} onChange={(event) => setTargetCategory(event.target.value as Category)} aria-label="Target category">
+          <select value={targetCategory} onChange={(event) => setTargetCategory(event.target.value as Category)} aria-label="Target category" title="Category to use when moving selected emails">
             {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
           </select>
-          <label className="inline-toggle">
+          <label className="inline-toggle" title="Save a sender rule with the manual move">
             <input type="checkbox" checked={applySenderRule} onChange={(event) => setApplySenderRule(event.target.checked)} />
             Sender
           </label>
-          <button data-tour="move" onClick={moveSelected} disabled={busy || selected.size === 0}><MoveRight size={16} />Move</button>
+          <button data-tour="move" onClick={moveSelected} disabled={busy || selected.size === 0} title="Move selected emails into the chosen local category"><MoveRight size={16} />Move</button>
           <span className="inline-toolset" data-tour="stored">
-            <select value={storedCategory} onChange={(event) => setStoredCategory(event.target.value as Category)} aria-label="Stored category">
+            <select value={storedCategory} onChange={(event) => setStoredCategory(event.target.value as Category)} aria-label="Stored category" title="Stored category page to load from SQLite">
               {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
             </select>
-            <button onClick={() => loadStoredEmails()} disabled={busy}><Database size={16} />Stored</button>
+            <button onClick={() => loadStoredEmails()} disabled={busy} title="Load the selected category from SQLite review state"><Database size={16} />Stored</button>
           </span>
           <span className="inline-toolset" data-tour="cleanup">
-            <button onClick={() => bulk("mark_read")} disabled={busy}><MailCheck size={16} />Read</button>
-            <button onClick={() => bulk("unsubscribe")} disabled={busy}><Unlink size={16} />Unsubscribe</button>
-            <button className="danger" onClick={() => bulk("trash")} disabled={busy}><Trash2 size={16} />Trash</button>
+            <button onClick={() => bulk("mark_read")} disabled={busy} title="Mark selected Gmail messages as read"><MailCheck size={16} />Read</button>
+            <button onClick={() => bulk("unsubscribe")} disabled={busy} title="Preview unsubscribe options for selected messages"><Unlink size={16} />Unsubscribe</button>
+            <button className="danger" onClick={() => bulk("trash")} disabled={busy} title="Preview moving selected messages to Gmail trash"><Trash2 size={16} />Trash</button>
           </span>
         </div>
       </section>
@@ -482,8 +490,8 @@ function App() {
         <section className="monitor-panel">
           <span>Stored {categoryLabel(storedCategory)}</span>
           <span>{Math.min(storedPage.offset + storedPage.emails.length, storedPage.total)}/{storedPage.total} loaded</span>
-          <button onClick={() => loadStoredEmails(Math.max(0, storedPage.offset - storedPage.limit))} disabled={busy || storedPage.offset === 0}>Previous</button>
-          <button onClick={() => loadStoredEmails(storedPage.offset + storedPage.limit)} disabled={busy || storedPage.offset + storedPage.limit >= storedPage.total}>Next</button>
+          <button onClick={() => loadStoredEmails(Math.max(0, storedPage.offset - storedPage.limit))} disabled={busy || storedPage.offset === 0} title="Load the previous stored page">Previous</button>
+          <button onClick={() => loadStoredEmails(storedPage.offset + storedPage.limit)} disabled={busy || storedPage.offset + storedPage.limit >= storedPage.total} title="Load the next stored page">Next</button>
         </section>
       )}
 
@@ -518,8 +526,8 @@ function App() {
             <div className="confirm-row">
               <strong>{actionLabel(pendingAction.action)} pending</strong>
               <span>{pendingAction.ids.length} email(s){pendingAction.confirmationExpiresAt ? ` until ${new Date(pendingAction.confirmationExpiresAt).toLocaleTimeString()}` : ""}</span>
-              <button className="danger" onClick={confirmPendingAction} disabled={busy}>Confirm</button>
-              <button onClick={cancelPendingAction} disabled={busy}>Cancel</button>
+              <button className="danger" onClick={confirmPendingAction} disabled={busy} title="Execute the previewed cleanup action">Confirm</button>
+              <button onClick={cancelPendingAction} disabled={busy} title="Cancel the pending cleanup action">Cancel</button>
             </div>
           )}
           {actionResults.map((result, index) => (
@@ -566,6 +574,7 @@ function App() {
           onSkip={skipTutorial}
         />
       )}
+      {loadingScreen && <LoadingOverlay title={loadingScreen.title} body={loadingScreen.body} />}
     </main>
   );
 }
@@ -621,6 +630,20 @@ function TutorialOverlay({ step, index, total, onNext, onSkip }: { step: { title
         </div>
       </aside>
     </>
+  );
+}
+
+function LoadingOverlay({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="loading-backdrop" role="status" aria-live="polite" aria-label={title}>
+      <div className="loading-card">
+        <LoaderCircle className="loading-spinner" size={28} />
+        <div>
+          <h2>{title}</h2>
+          <p>{body}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 

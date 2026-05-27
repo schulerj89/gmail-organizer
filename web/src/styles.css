@@ -105,7 +105,7 @@ select {
   padding: 0 10px;
 }
 
-.query-group input:first-child {
+.query-group > input:first-child {
   min-width: 260px;
 }
 
@@ -124,15 +124,19 @@ select {
   border-radius: 6px;
   color: #435057;
   display: inline-flex;
+  flex: 0 0 auto;
   gap: 6px;
   height: 38px;
   padding: 0 10px;
+  white-space: nowrap;
+  width: auto;
 }
 
 .inline-toggle input {
   appearance: auto;
   background: transparent;
   border: 0;
+  flex: 0 0 14px;
   height: auto;
   min-width: 14px;
   padding: 0;
@@ -488,6 +492,52 @@ button:disabled {
   color: #ffffff;
 }
 
+.loading-backdrop {
+  align-items: center;
+  background: rgba(13, 20, 25, 0.62);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 120;
+}
+
+.loading-card {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d7ddda;
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(13, 20, 25, 0.32);
+  color: #182026;
+  display: flex;
+  gap: 14px;
+  max-width: 480px;
+  padding: 18px;
+}
+
+.loading-card h2 {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.loading-card p {
+  color: #435057;
+  line-height: 1.45;
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+  color: #1e684e;
+  flex: 0 0 auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 900px) {
   .app-shell {
     padding: 16px;
@@ -507,7 +557,7 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .query-group input:first-child {
+  .query-group > input:first-child {
     min-width: 0;
     width: 100%;
   }
