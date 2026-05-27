@@ -63,6 +63,41 @@ $env:GOOGLE_CLIENT_SECRET_FILE="<absolute path to client_secret*.json>"
 $env:OPENAI_API_KEY_FILE="<absolute path to openai_key.txt>"
 ```
 
+## Gmail API Permissions
+
+The app requests this Gmail OAuth scope:
+
+- `https://www.googleapis.com/auth/gmail.modify`
+
+This is required because Gmail Organizer reads Gmail message metadata, marks messages as read, and moves selected messages to Gmail Trash. The app does **not** permanently delete messages with Gmail's delete endpoint; trash actions use Gmail Trash so messages remain recoverable in Gmail for the normal Trash retention window.
+
+Google describes `gmail.modify` as read/write Gmail access except immediate permanent deletion that bypasses Trash. See Google's Gmail API scope reference: <https://developers.google.com/workspace/gmail/api/auth/scopes>.
+
+## Google OAuth Setup
+
+Create the Gmail OAuth client before starting the app:
+
+1. Open Google Cloud Console and create or select a project.
+2. Go to **APIs & Services > Library**, search for **Gmail API**, and enable it.
+3. Go to **APIs & Services > OAuth consent screen**.
+4. Choose **External** for a personal Gmail account, keep the app in **Testing**, and add your Gmail address under **Test users**.
+5. On the consent screen data/scopes step, add the Gmail API scope `https://www.googleapis.com/auth/gmail.modify` if Google prompts you to list scopes.
+6. Go to **APIs & Services > Credentials**.
+7. Create an **OAuth client ID**. For this local callback flow, use **Web application**.
+8. Add the exact authorized redirect URI that matches how you run the app:
+   - Default local run: `http://127.0.0.1:8787/api/auth/google/callback`
+   - Port 8080 callback: `http://localhost:8080/oauth2callback`
+9. Download the OAuth client JSON and save it somewhere outside the repo, or as a local ignored `client_secret*.json` file.
+10. Point the app at it:
+
+```powershell
+$env:GOOGLE_CLIENT_SECRET_FILE="<absolute path to client_secret*.json>"
+```
+
+If you change scopes, redirect URLs, or OAuth client files after already authorizing, delete `data/gmail_token.json` and click **Authorize** again in the app so Google issues a fresh token.
+
+For OAuth client background and redirect URI rules, see Google's OAuth setup documentation: <https://support.google.com/googleapi/answer/6158849>.
+
 Open `http://127.0.0.1:8787`.
 
 If your Google OAuth client is registered with `http://localhost:8080/oauth2callback`, start the app with the matching local callback:
