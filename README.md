@@ -99,6 +99,10 @@ Dashboard overview:
 
 ![Dashboard overview](docs/screenshot.png)
 
+Dark mode dashboard:
+
+![Dark mode dashboard](docs/screenshot-dark.png)
+
 Guided tutorial overlay:
 
 ![Guided tutorial overlay](docs/screenshot-tutorial.png)
