@@ -88,3 +88,15 @@ func TestActionResultsForIDs(t *testing.T) {
 		t.Fatalf("unexpected results: %#v", results)
 	}
 }
+
+func TestHiddenSystemLabel(t *testing.T) {
+	if !hiddenSystemLabel([]string{"INBOX", "TRASH"}) {
+		t.Fatal("expected trash label to be hidden")
+	}
+	if !hiddenSystemLabel([]string{"spam"}) {
+		t.Fatal("expected spam label to be hidden")
+	}
+	if hiddenSystemLabel([]string{"INBOX", "CATEGORY_PROMOTIONS"}) {
+		t.Fatal("ordinary mailbox labels should remain visible")
+	}
+}

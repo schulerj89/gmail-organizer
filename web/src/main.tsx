@@ -24,6 +24,7 @@ type PendingAction = {
   ids: string[];
   confirmationToken: string;
   confirmationExpiresAt?: string;
+  senderKey?: string;
 };
 
 type QueueMode = "category" | "unsubscribe" | "cleanup" | "senders" | "ai";
@@ -395,7 +396,7 @@ function App() {
     }
   }
 
-  async function bulk(action: "trash" | "mark_read" | "unsubscribe", overrideIds?: string[]) {
+  async function bulk(action: "trash" | "mark_read" | "unsubscribe", overrideIds?: string[], senderKey?: string) {
     const ids = overrideIds ?? Array.from(selected);
     if (ids.length === 0) {
       setNotice("Select at least one email first.");
@@ -414,10 +415,10 @@ function App() {
         if (!result.confirmationToken) {
           throw new Error("Server did not return a confirmation token.");
         }
-        setPendingAction({ action, ids, confirmationToken: result.confirmationToken, confirmationExpiresAt: result.confirmationExpiresAt });
+        setPendingAction({ action, ids, confirmationToken: result.confirmationToken, confirmationExpiresAt: result.confirmationExpiresAt, senderKey });
         setNotice("");
       } else {
-        finishAction(action, result.results);
+        finishAction(action, result.results, undefined, senderKey);
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Bulk action failed.");
@@ -436,10 +437,10 @@ function App() {
       const summary = result.summary ?? summarizeActionResults(result.results);
       setActionResults(result.results);
       setActionSummary(summary);
-      finishAction(pendingAction.action, result.results, summary);
       if (result.emails) {
         setEmails(result.emails);
       }
+      finishAction(pendingAction.action, result.results, summary, pendingAction.senderKey);
       setPendingAction(null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Bulk action failed.");
@@ -461,7 +462,7 @@ function App() {
     setActionSummary(null);
   }
 
-  function finishAction(action: "trash" | "mark_read" | "unsubscribe", results: ActionResult[], summary = summarizeActionResults(results)) {
+  function finishAction(action: "trash" | "mark_read" | "unsubscribe", results: ActionResult[], summary = summarizeActionResults(results), senderKey?: string) {
     const preparedLinks = results.filter((item) => item.safeLink);
     if (action === "trash") {
       setNotice(`${summary.succeeded} message(s) moved to Gmail Trash. ${summary.failed ? `${summary.failed} failed. ` : ""}${summary.skipped ? `${summary.skipped} skipped. ` : ""}`);
@@ -472,7 +473,7 @@ function App() {
     }
     if (action === "trash") {
       const trashed = new Set(results.filter((item) => item.status === "trashed").map((item) => item.emailId));
-      setEmails((current) => current.filter((email) => !trashed.has(email.id)));
+      setEmails((current) => current.filter((email) => !trashed.has(email.id) && !(summary.succeeded > 0 && senderKey && senderAddress(email.from) === senderKey)));
       setSelected((current) => new Set(Array.from(current).filter((id) => !trashed.has(id))));
       if (detailEmailId && trashed.has(detailEmailId)) {
         setDetailEmailId(null);
@@ -758,7 +759,7 @@ function App() {
               selected={selected}
               onSelect={(ids) => selectEmailIds(ids)}
               onPreviewUnsubscribe={(ids) => bulk("unsubscribe", ids)}
-              onPreviewTrash={(ids) => bulk("trash", ids)}
+              onPreviewTrash={(ids, senderKey) => bulk("trash", ids, senderKey)}
               onOpenSample={(id) => setDetailEmailId(id)}
             />
           ) : (
@@ -1036,7 +1037,7 @@ function EmailList({ emails, selected, onToggle, onOpen }: { emails: EmailSummar
   );
 }
 
-function SenderGroupList({ groups, selected, onSelect, onPreviewUnsubscribe, onPreviewTrash, onOpenSample }: { groups: SenderGroup[]; selected: Set<string>; onSelect: (ids: string[]) => void; onPreviewUnsubscribe: (ids: string[]) => void; onPreviewTrash: (ids: string[]) => void; onOpenSample: (id: string) => void }) {
+function SenderGroupList({ groups, selected, onSelect, onPreviewUnsubscribe, onPreviewTrash, onOpenSample }: { groups: SenderGroup[]; selected: Set<string>; onSelect: (ids: string[]) => void; onPreviewUnsubscribe: (ids: string[]) => void; onPreviewTrash: (ids: string[], senderKey: string) => void; onOpenSample: (id: string) => void }) {
   if (groups.length === 0) {
     return (
       <div className="empty-state">
@@ -1066,7 +1067,7 @@ function SenderGroupList({ groups, selected, onSelect, onPreviewUnsubscribe, onP
               <button onClick={() => onSelect(ids)}><Check size={16} />Select sender</button>
               {sample && <button onClick={() => onOpenSample(sample.id)}><Eye size={16} />Review sample</button>}
               <button onClick={() => onPreviewUnsubscribe(ids)}><Unlink size={16} />Preview unsubscribe</button>
-              <button className="danger" onClick={() => onPreviewTrash(ids)}><Trash2 size={16} />Preview trash</button>
+              <button className="danger" onClick={() => onPreviewTrash(ids, group.key)}><Trash2 size={16} />Preview trash</button>
             </div>
           </article>
         );

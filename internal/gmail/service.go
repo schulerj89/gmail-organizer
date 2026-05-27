@@ -105,7 +105,11 @@ func (s *Service) ListPage(ctx context.Context, query string, pageToken string, 
 		if err != nil {
 			return nil, "", err
 		}
-		emails = append(emails, toEmailSummary(item))
+		email := toEmailSummary(item)
+		if hiddenSystemLabel(email.LabelIDs) {
+			continue
+		}
+		emails = append(emails, email)
 	}
 	return emails, resp.NextPageToken, nil
 }
@@ -212,6 +216,16 @@ func toEmailSummary(message *gmailapi.Message) domain.EmailSummary {
 		UnsubscribeMethod:  method,
 		CanAutoUnsubscribe: canAuto,
 	}
+}
+
+func hiddenSystemLabel(labels []string) bool {
+	for _, label := range labels {
+		switch strings.ToUpper(strings.TrimSpace(label)) {
+		case "TRASH", "SPAM":
+			return true
+		}
+	}
+	return false
 }
 
 func firstUnsubscribeTarget(header string) string {
