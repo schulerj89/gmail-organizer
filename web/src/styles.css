@@ -116,8 +116,13 @@ select {
 }
 
 .inline-toggle input {
+  appearance: auto;
+  background: transparent;
+  border: 0;
   height: auto;
+  min-width: 14px;
   padding: 0;
+  width: 14px;
 }
 
 button {

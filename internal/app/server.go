@@ -304,9 +304,7 @@ func (s *Server) fetchPageAndClassify(ctx context.Context, query string, pageTok
 func (s *Server) applyClassifications(ctx context.Context, emails []domain.EmailSummary, preferAI bool) []domain.EmailSummary {
 	classifications, _ := s.heuristic.Classify(ctx, emails)
 	if preferAI && s.cfg.EnableOpenAI && (secrets.FileSecret{Path: s.cfg.OpenAIKeyFile}).Exists() {
-		if aiClassifications, aiErr := s.ai.Classify(ctx, emails); aiErr == nil {
-			classifications = aiClassifications
-		}
+		classifications = overlayAIClassifications(ctx, classifications, emails, s.ai, 50)
 	}
 	byID := map[string]domain.Classification{}
 	for _, item := range classifications {
@@ -320,6 +318,36 @@ func (s *Server) applyClassifications(ctx context.Context, emails []domain.Email
 			email.Reason = classification.Reason
 		}
 		out = append(out, email)
+	}
+	return out
+}
+
+func overlayAIClassifications(ctx context.Context, fallback []domain.Classification, emails []domain.EmailSummary, ai classifier.Classifier, chunkSize int) []domain.Classification {
+	if chunkSize <= 0 {
+		chunkSize = 50
+	}
+	byID := map[string]domain.Classification{}
+	for _, item := range fallback {
+		byID[item.EmailID] = item
+	}
+	for start := 0; start < len(emails); start += chunkSize {
+		end := start + chunkSize
+		if end > len(emails) {
+			end = len(emails)
+		}
+		classifications, err := ai.Classify(ctx, emails[start:end])
+		if err != nil {
+			continue
+		}
+		for _, item := range classifications {
+			byID[item.EmailID] = item
+		}
+	}
+	out := make([]domain.Classification, 0, len(byID))
+	for _, email := range emails {
+		if item, ok := byID[email.ID]; ok {
+			out = append(out, item)
+		}
 	}
 	return out
 }

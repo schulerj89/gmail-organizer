@@ -15,6 +15,7 @@ Build a secure, memory-efficient Gmail AI organizer that categorizes emails, mon
 - Backend monitor service polls on a bounded interval, keeps a bounded cache, classifies results, and exposes `/api/monitor`.
 - Unsubscribe action executes only one-click HTTPS unsubscribe headers; other targets are surfaced as review links in the dashboard.
 - Backend scan service pages through Gmail metadata, classifies and persists each batch, and exposes `/api/scan`.
+- Scan and monitor can opt into AI classification; backend AI calls are chunked with heuristic fallback.
 - Credentials: referenced from files outside the repo:
   - Google OAuth client secret: `GOOGLE_CLIENT_SECRET_FILE`
   - OpenAI key: `OPENAI_API_KEY_FILE`

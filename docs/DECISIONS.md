@@ -38,6 +38,8 @@ The app extracts `https://` and `mailto:` List-Unsubscribe targets. It executes 
 
 The app uses a local heuristic classifier as a deterministic fallback and an OpenAI Responses API classifier when enabled and configured. Prompts include only sender, subject, snippet, and unsubscribe presence to reduce sensitive data exposure.
 
+AI use for scan and monitor jobs is explicit in the dashboard. Backend AI classification is chunked and failures fall back to local heuristic classifications for the affected chunk instead of failing the whole scan.
+
 ## Monitoring
 
 The dashboard controls a backend polling service instead of only refreshing in the browser. The monitor keeps a bounded in-memory cache, defaults to local classification to avoid repeated AI calls, and exposes status through `/api/monitor` for UI polling.

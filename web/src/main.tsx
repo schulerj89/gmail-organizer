@@ -27,6 +27,7 @@ function App() {
   const [scanLimit, setScanLimit] = useState(1000);
   const [targetCategory, setTargetCategory] = useState<Category>("needs_review");
   const [applySenderRule, setApplySenderRule] = useState(true);
+  const [useAIForJobs, setUseAIForJobs] = useState(false);
   const [source, setSource] = useState("demo");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -138,7 +139,7 @@ function App() {
   async function toggleMonitor() {
     setBusy(true);
     try {
-      const status = monitor?.running ? await stopMonitor() : await startMonitor(query, max, false);
+      const status = monitor?.running ? await stopMonitor() : await startMonitor(query, max, useAIForJobs);
       setMonitor(status);
       if (status.emails.length > 0) {
         setEmails(status.emails);
@@ -155,7 +156,7 @@ function App() {
   async function toggleScan() {
     setBusy(true);
     try {
-      const status = scan?.running ? await stopScan() : await startScan(query, scanLimit, Math.min(max, 200), false);
+      const status = scan?.running ? await stopScan() : await startScan(query, scanLimit, Math.min(max, 200), useAIForJobs);
       setScan(status);
       if (status.emails.length > 0) {
         setEmails(status.emails);
@@ -252,6 +253,10 @@ function App() {
           <button onClick={loadEmails} disabled={busy}><RefreshCcw size={16} />Refresh</button>
           <button className={scan?.running ? "monitoring" : ""} onClick={toggleScan} disabled={busy}><Search size={16} />Scan</button>
           <button className={monitor?.running ? "monitoring" : ""} onClick={toggleMonitor} disabled={busy}><Wifi size={16} />Monitor</button>
+          <label className="inline-toggle">
+            <input type="checkbox" checked={useAIForJobs} onChange={(event) => setUseAIForJobs(event.target.checked)} />
+            AI jobs
+          </label>
           <button onClick={authorizeGmail}><Shield size={16} />Authorize</button>
         </div>
         <div className="action-group">
@@ -276,6 +281,7 @@ function App() {
       {monitor && (
         <section className="monitor-panel">
           <span>{monitor.running ? "Monitoring on" : "Monitoring off"}</span>
+          <span>{monitor.useAI ? "AI" : "Local"} classify</span>
           <span>{monitor.cacheSize}/{monitor.cacheLimit} cached</span>
           <span>{monitor.intervalSeconds}s interval</span>
           {monitor.lastSuccessAt && <span>Last success {new Date(monitor.lastSuccessAt).toLocaleTimeString()}</span>}
@@ -286,6 +292,7 @@ function App() {
       {scan && (
         <section className="monitor-panel">
           <span>{scan.running ? "Scan running" : scan.completed ? "Scan complete" : "Scan idle"}</span>
+          <span>{scan.useAI ? "AI" : "Local"} classify</span>
           <span>{scan.processed}/{scan.limit} processed</span>
           <span>{scan.batchSize} batch</span>
           <span>{scan.cacheSize}/{scan.cacheLimit} cached</span>

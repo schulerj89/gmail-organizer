@@ -16,6 +16,7 @@ This is the initial working slice. It includes:
 - Gmail metadata fetch using `gmail.modify` scope.
 - Heuristic categorization and optional OpenAI Responses API categorization.
 - Dashboard lanes by category.
+- Explicit AI toggle for scan/monitor jobs with bounded backend AI classification chunks.
 - Manual category correction for selected emails.
 - Sender rules from manual category corrections for future monitoring/scanning.
 - Persisted review coverage metrics across scans and manual moves.
@@ -74,6 +75,7 @@ $env:GMAIL_ORGANIZER_SCAN_CACHE_LIMIT="1000"
 - Mailbox scans fetch Gmail metadata in pages, persist classifications after each batch, and keep only a bounded recent cache in memory.
 - Review coverage stats are derived from local classification state and do not require reloading message bodies.
 - Sender rules are stored locally and apply to future emails after classifier output but before per-message overrides.
+- AI scan/monitor classification is opt-in and chunked so prompts stay bounded.
 
 ## Verification
 
