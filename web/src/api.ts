@@ -1,4 +1,4 @@
-import type { ActionResult, AppConfig, EmailSummary, MonitorStatus, ScanStatus } from "./types";
+import type { ActionResult, AppConfig, EmailSummary, MonitorStatus, ReviewStats, ScanStatus } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -45,6 +45,10 @@ export async function runAction(action: "trash" | "mark_read" | "unsubscribe", i
 
 export async function getGoogleAuthURL() {
   return request<{ url: string }>("/api/auth/google/url");
+}
+
+export async function fetchReviewStats() {
+  return request<ReviewStats>("/api/review");
 }
 
 export async function fetchMonitorStatus() {

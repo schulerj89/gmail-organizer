@@ -42,3 +42,31 @@ func TestReviewStoreRecordsAudit(t *testing.T) {
 		t.Fatalf("unexpected entries: %#v", entries)
 	}
 }
+
+func TestReviewStoreStats(t *testing.T) {
+	store, err := NewReviewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	emails := []domain.EmailSummary{
+		{ID: "email-1", Category: domain.CategoryPromotions, Confidence: 0.8, Reason: "test"},
+		{ID: "email-2", Category: domain.CategoryNeedsReview, Confidence: 0.4, Reason: "test"},
+		{ID: "email-3", Category: domain.CategoryUnwanted, Confidence: 1, Reason: "Manually categorized."},
+	}
+	if err := store.SaveClassifications(emails); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	stats, err := store.Stats()
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if stats.Total != 3 || stats.NeedsReview != 1 || stats.Manual != 1 {
+		t.Fatalf("unexpected stats: %#v", stats)
+	}
+	if got := stats.ByCategory[domain.CategoryUnwanted]; got != 1 {
+		t.Fatalf("expected one unwanted email, got %d", got)
+	}
+	if stats.UpdatedAt == nil {
+		t.Fatal("expected updated timestamp")
+	}
+}

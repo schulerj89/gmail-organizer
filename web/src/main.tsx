@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Archive, Bot, Check, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
-import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
-import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ScanStatus } from "./types";
+import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchReviewStats, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
+import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewStats, ScanStatus } from "./types";
 import "./styles.css";
 
 const categories: { id: Category; label: string }[] = [
@@ -31,6 +31,7 @@ function App() {
   const [notice, setNotice] = useState("");
   const [monitor, setMonitor] = useState<MonitorStatus | null>(null);
   const [scan, setScan] = useState<ScanStatus | null>(null);
+  const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null);
   const [actionResults, setActionResults] = useState<ActionResult[]>([]);
 
   useEffect(() => {
@@ -38,12 +39,14 @@ function App() {
     void loadEmails();
     void refreshMonitor();
     void refreshScan();
+    void refreshReviewStats();
   }, []);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       void refreshMonitor();
       void refreshScan();
+      void refreshReviewStats();
     }, 5000);
     return () => window.clearInterval(interval);
   }, []);
@@ -104,11 +107,20 @@ function App() {
     }
   }
 
+  async function refreshReviewStats() {
+    try {
+      setReviewStats(await fetchReviewStats());
+    } catch {
+      // Review stats should not interrupt inbox review.
+    }
+  }
+
   async function classify(useAI: boolean) {
     setBusy(true);
     try {
       const result = await classifyEmails(emails, useAI);
       setEmails(result.emails);
+      await refreshReviewStats();
       setNotice(useAI ? "AI categorization finished." : "Local categorization finished.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Classification failed.");
@@ -191,6 +203,7 @@ function App() {
       const result = await updateCategories(ids, targetCategory);
       setEmails(result.emails);
       setSelected(new Set());
+      await refreshReviewStats();
       setNotice(`${ids.length} email(s) moved to ${categoryLabel(targetCategory)}.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Category update failed.");
@@ -273,6 +286,27 @@ function App() {
           <span>{scan.cacheSize}/{scan.cacheLimit} cached</span>
           {scan.hasMore && <span>More available</span>}
           {scan.lastError && <span className="monitor-error">{scan.lastError}</span>}
+        </section>
+      )}
+
+      {reviewStats && (
+        <section className="coverage-panel">
+          <div>
+            <span>Persisted review state</span>
+            <strong>{reviewStats.total}</strong>
+          </div>
+          <div>
+            <span>Needs review</span>
+            <strong>{reviewStats.needsReview}</strong>
+          </div>
+          <div>
+            <span>Manual moves</span>
+            <strong>{reviewStats.manual}</strong>
+          </div>
+          <div>
+            <span>Reviewed</span>
+            <strong>{Math.max(0, reviewStats.total - reviewStats.needsReview)}</strong>
+          </div>
         </section>
       )}
 

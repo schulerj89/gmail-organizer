@@ -10,4 +10,3 @@ func TestValidCategory(t *testing.T) {
 		t.Fatal("expected unknown category to be invalid")
 	}
 }
-

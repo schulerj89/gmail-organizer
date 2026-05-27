@@ -71,6 +71,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/categories", s.handleCategoryUpdate)
 	mux.HandleFunc("POST /api/actions", s.handleAction)
 	mux.HandleFunc("GET /api/audit", s.handleAudit)
+	mux.HandleFunc("GET /api/review", s.handleReviewStats)
 	mux.HandleFunc("GET /api/monitor", s.handleMonitorStatus)
 	mux.HandleFunc("POST /api/monitor/start", s.handleMonitorStart)
 	mux.HandleFunc("POST /api/monitor/stop", s.handleMonitorStop)
@@ -212,6 +213,15 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+func (s *Server) handleReviewStats(w http.ResponseWriter, _ *http.Request) {
+	stats, err := s.store.Stats()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
 }
 
 func (s *Server) handleMonitorStatus(w http.ResponseWriter, _ *http.Request) {

@@ -69,6 +69,14 @@ export type ScanStatus = {
   emails: EmailSummary[];
 };
 
+export type ReviewStats = {
+  total: number;
+  manual: number;
+  needsReview: number;
+  byCategory: Partial<Record<Category, number>>;
+  updatedAt?: string;
+};
+
 export type ActionResult = {
   emailId: string;
   status: string;

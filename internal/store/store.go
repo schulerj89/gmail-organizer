@@ -32,6 +32,14 @@ type AuditEntry struct {
 	CreatedAt time.Time             `json:"createdAt"`
 }
 
+type ReviewStats struct {
+	Total       int                     `json:"total"`
+	Manual      int                     `json:"manual"`
+	NeedsReview int                     `json:"needsReview"`
+	ByCategory  map[domain.Category]int `json:"byCategory"`
+	UpdatedAt   *time.Time              `json:"updatedAt,omitempty"`
+}
+
 func NewReviewStore(dataDir string) (*ReviewStore, error) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, err
@@ -101,6 +109,37 @@ func (s *ReviewStore) RecordAction(action domain.BulkAction, ids []string, resul
 		CreatedAt: time.Now().UTC(),
 	}
 	return json.NewEncoder(file).Encode(entry)
+}
+
+func (s *ReviewStore) Stats() (ReviewStats, error) {
+	state, err := s.loadState()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ReviewStats{ByCategory: map[domain.Category]int{}}, nil
+		}
+		return ReviewStats{}, err
+	}
+	stats := ReviewStats{
+		Total:      len(state),
+		ByCategory: map[domain.Category]int{},
+	}
+	var latest time.Time
+	for _, item := range state {
+		stats.ByCategory[item.Category]++
+		if item.Category == domain.CategoryNeedsReview {
+			stats.NeedsReview++
+		}
+		if item.Reason == "Manually categorized." {
+			stats.Manual++
+		}
+		if item.UpdatedAt.After(latest) {
+			latest = item.UpdatedAt
+		}
+	}
+	if !latest.IsZero() {
+		stats.UpdatedAt = &latest
+	}
+	return stats, nil
 }
 
 func (s *ReviewStore) RecentAudit(limit int) ([]AuditEntry, error) {

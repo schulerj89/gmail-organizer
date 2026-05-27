@@ -17,6 +17,7 @@ This is the initial working slice. It includes:
 - Heuristic categorization and optional OpenAI Responses API categorization.
 - Dashboard lanes by category.
 - Manual category correction for selected emails.
+- Persisted review coverage metrics across scans and manual moves.
 - Bulk trash, mark-read, and unsubscribe-preparation actions.
 - One-click unsubscribe execution for Gmail messages that advertise `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
 - Paged mailbox scanning for larger cleanup passes without loading the full mailbox into memory.
@@ -70,6 +71,7 @@ $env:GMAIL_ORGANIZER_SCAN_CACHE_LIMIT="1000"
 - API responses include secret file paths and existence status only, never secret contents.
 - Background monitoring keeps a bounded in-memory cache and uses metadata/snippets rather than full message bodies.
 - Mailbox scans fetch Gmail metadata in pages, persist classifications after each batch, and keep only a bounded recent cache in memory.
+- Review coverage stats are derived from local classification state and do not require reloading message bodies.
 
 ## Verification
 

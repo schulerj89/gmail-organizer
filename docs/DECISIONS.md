@@ -22,6 +22,10 @@ Bulk delete initially maps to Gmail trash. Permanent deletion is intentionally d
 
 Manual category moves persist through the same local review state as classifier output. A manual move uses confidence `1.0` and a clear reason so user corrections override later low-confidence classifier output when the email is loaded again.
 
+## Coverage Metrics
+
+Review coverage is calculated from the local classification state, not from Gmail message bodies. This gives the dashboard a stable count of persisted categorization progress across paged scans, manual moves, and future monitoring runs while keeping memory and data exposure bounded.
+
 ## Unsubscribe
 
 The app extracts `https://` and `mailto:` List-Unsubscribe targets. It executes only HTTPS one-click unsubscribe requests when Gmail provides `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; ordinary HTTPS and `mailto:` targets are prepared as review links. One-click execution rejects local/private literal IP targets and does not follow redirects.
