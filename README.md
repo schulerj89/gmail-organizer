@@ -19,7 +19,7 @@ This is the initial working slice. It includes:
 - Explicit AI toggle for scan/monitor jobs with bounded backend AI classification chunks.
 - Manual category correction for selected emails.
 - Sender rules from manual category corrections for future monitoring/scanning.
-- Persisted review coverage metrics across scans and manual moves.
+- SQLite-backed persisted review coverage metrics across scans and manual moves.
 - Reload stored category pages from prior scans for later review and cleanup.
 - Bulk trash, mark-read, and unsubscribe-preparation actions.
 - Batched Gmail mark-read updates for high-volume cleanup selections.
@@ -73,6 +73,16 @@ $env:GMAIL_ORGANIZER_MONITOR_CACHE_LIMIT="500"
 $env:GMAIL_ORGANIZER_SCAN_CACHE_LIMIT="1000"
 ```
 
+Optional OpenAI safety settings:
+
+```powershell
+$env:OPENAI_MAX_OUTPUT_TOKENS="2000"
+$env:OPENAI_MAX_RETRIES="3"
+$env:OPENAI_REQUEST_DELAY_MS="1200"
+$env:OPENAI_CLASSIFY_CHUNK_SIZE="25"
+$env:OPENAI_TIMEOUT_SECONDS="45"
+```
+
 ## Screenshot
 
 ![Dashboard screenshot](docs/screenshot.png)
@@ -90,9 +100,11 @@ $env:GMAIL_ORGANIZER_SCAN_CACHE_LIMIT="1000"
 - Mailbox scans fetch Gmail metadata in pages, persist classifications after each batch, and keep only a bounded recent cache in memory.
 - Review coverage stats are derived from local classification state and do not require reloading message bodies.
 - Stored category pages preserve minimal metadata needed for later review/actions without keeping the full scan in memory.
+- Review state, sender rules, and action audit entries are stored in `data/review_state.db`; older JSON state files are imported into SQLite on first startup.
 - Successfully trashed messages are removed from local review state after the action is audited.
 - Sender rules are stored locally and apply to future emails after classifier output but before per-message overrides.
 - AI scan/monitor classification is opt-in and chunked so prompts stay bounded.
+- OpenAI classification uses configurable chunk size, output-token cap, request pacing, timeout, and retry settings for rate-limit-aware scanning.
 - Mark-read actions use Gmail batch modify calls of up to 1000 message IDs per request.
 - Action audit reads allow bounded large entries so 1000-message cleanup results remain reviewable.
 

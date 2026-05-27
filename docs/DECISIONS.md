@@ -26,7 +26,7 @@ Trash actions use a two-step flow: the first request returns a preview plus a sh
 
 Mark-read uses Gmail batch modify requests of up to 1000 message IDs. Trash remains per-message because Gmail exposes safe trash semantics per message, while permanent batch delete is intentionally avoided.
 
-Action audit entries are JSONL and can be large for 1000-message cleanup results. Audit reads use an explicit bounded scanner buffer so large legitimate entries remain reviewable without allowing unbounded memory growth.
+Action audit entries can be large for 1000-message cleanup results, so they are stored in SQLite as bounded JSON payloads instead of one append-only file that must be scanned for every read.
 
 After a trash action returns successful `trashed` results, those IDs are removed from local review state and in-memory lanes after the audit entry is written. This keeps completed cleanup items from reappearing in stored category reloads while preserving the audit trail.
 
@@ -40,9 +40,11 @@ Manual category moves can save a sender rule. Sender rules are local-only, apply
 
 ## Coverage Metrics
 
-Review coverage is calculated from the local classification state, not from Gmail message bodies. This gives the dashboard a stable count of persisted categorization progress across paged scans, manual moves, and future monitoring runs while keeping memory and data exposure bounded.
+Review coverage is calculated from the local SQLite classification state, not from Gmail message bodies. This gives the dashboard a stable count of persisted categorization progress across paged scans, manual moves, and future monitoring runs while keeping memory and data exposure bounded.
 
 The review store also keeps minimal message metadata with each classification so category pages from prior scans can be loaded later for cleanup. The dashboard loads those stored category pages on demand instead of keeping the entire scanned mailbox in the browser or backend cache.
+
+Review state, sender rules, and action audit entries are stored in a local SQLite database under ignored `data/`. The prior JSON files are imported on first startup when the database is empty. SQLite is used instead of one growing JSON document so stored category pages, stats, and audit reads can scale without repeatedly rewriting the full review state.
 
 ## Unsubscribe
 
@@ -55,6 +57,8 @@ One-click unsubscribe also uses the destructive-action confirmation token flow. 
 The app uses a local heuristic classifier as a deterministic fallback and an OpenAI Responses API classifier when enabled and configured. Prompts include only sender, subject, snippet, and unsubscribe presence to reduce sensitive data exposure.
 
 AI use for scan and monitor jobs is explicit in the dashboard. Backend AI classification is chunked and failures fall back to local heuristic classifications for the affected chunk instead of failing the whole scan.
+
+OpenAI calls set `max_output_tokens`, use a configurable chunk size, pace requests, and retry rate-limit or transient server responses with backoff. This keeps synchronous scan batches bounded and resilient while still allowing larger mailbox passes to iterate gradually.
 
 ## Monitoring
 

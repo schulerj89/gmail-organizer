@@ -60,10 +60,15 @@ func NewServer(cfg config.Config) (*Server, error) {
 		return nil, err
 	}
 	server := &Server{
-		cfg:           cfg,
-		gmail:         gmailService,
-		heuristic:     classifier.NewHeuristicClassifier(),
-		ai:            classifier.NewOpenAIResponsesClassifier(secrets.FileSecret{Path: cfg.OpenAIKeyFile}, cfg.OpenAIModel),
+		cfg:       cfg,
+		gmail:     gmailService,
+		heuristic: classifier.NewHeuristicClassifier(),
+		ai: classifier.NewOpenAIResponsesClassifier(secrets.FileSecret{Path: cfg.OpenAIKeyFile}, cfg.OpenAIModel, classifier.OpenAIOptions{
+			MaxOutputTokens: cfg.OpenAIMaxOutputTokens,
+			MaxRetries:      cfg.OpenAIMaxRetries,
+			RequestDelay:    time.Duration(cfg.OpenAIRequestDelayMs) * time.Millisecond,
+			Timeout:         time.Duration(cfg.OpenAITimeoutSeconds) * time.Second,
+		}),
 		store:         reviewStore,
 		state:         randomState(),
 		confirmations: map[string]pendingConfirmation{},
@@ -108,6 +113,13 @@ func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request) {
 		"openAIKey":          secrets.FileSecret{Path: s.cfg.OpenAIKeyFile}.SafeStatus(),
 		"openAIModel":        s.cfg.OpenAIModel,
 		"openAIEnabled":      s.cfg.EnableOpenAI,
+		"openAISettings": map[string]int{
+			"maxOutputTokens": s.cfg.OpenAIMaxOutputTokens,
+			"maxRetries":      s.cfg.OpenAIMaxRetries,
+			"requestDelayMs":  s.cfg.OpenAIRequestDelayMs,
+			"chunkSize":       s.cfg.OpenAIChunkSize,
+			"timeoutSeconds":  s.cfg.OpenAITimeoutSeconds,
+		},
 	})
 }
 
@@ -390,7 +402,7 @@ func (s *Server) fetchPageAndClassify(ctx context.Context, query string, pageTok
 func (s *Server) applyClassifications(ctx context.Context, emails []domain.EmailSummary, preferAI bool) []domain.EmailSummary {
 	classifications, _ := s.heuristic.Classify(ctx, emails)
 	if preferAI && s.cfg.EnableOpenAI && (secrets.FileSecret{Path: s.cfg.OpenAIKeyFile}).Exists() {
-		classifications = overlayAIClassifications(ctx, classifications, emails, s.ai, 50)
+		classifications = overlayAIClassifications(ctx, classifications, emails, s.ai, s.cfg.OpenAIChunkSize)
 	}
 	byID := map[string]domain.Classification{}
 	for _, item := range classifications {

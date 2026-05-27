@@ -10,10 +10,7 @@ import (
 )
 
 func TestReviewStoreSavesAndAppliesClassifications(t *testing.T) {
-	store, err := NewReviewStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := newTestReviewStore(t)
 	email := domain.EmailSummary{
 		ID:         "email-1",
 		Category:   domain.CategoryPromotions,
@@ -30,10 +27,7 @@ func TestReviewStoreSavesAndAppliesClassifications(t *testing.T) {
 }
 
 func TestReviewStoreRecordsAudit(t *testing.T) {
-	store, err := NewReviewStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := newTestReviewStore(t)
 	if err := store.RecordAction(domain.ActionTrash, []string{"email-1"}, []domain.ActionResult{{EmailID: "email-1", Status: "trashed"}}); err != nil {
 		t.Fatalf("record: %v", err)
 	}
@@ -47,10 +41,7 @@ func TestReviewStoreRecordsAudit(t *testing.T) {
 }
 
 func TestReviewStoreReadsLargeAuditEntry(t *testing.T) {
-	store, err := NewReviewStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := newTestReviewStore(t)
 	ids := make([]string, 0, 1000)
 	results := make([]domain.ActionResult, 0, 1000)
 	message := strings.Repeat("bulk action detail ", 8)
@@ -72,10 +63,7 @@ func TestReviewStoreReadsLargeAuditEntry(t *testing.T) {
 }
 
 func TestReviewStoreStats(t *testing.T) {
-	store, err := NewReviewStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := newTestReviewStore(t)
 	emails := []domain.EmailSummary{
 		{ID: "email-1", Category: domain.CategoryPromotions, Confidence: 0.8, Reason: "test"},
 		{ID: "email-2", Category: domain.CategoryNeedsReview, Confidence: 0.4, Reason: "test"},
@@ -100,10 +88,7 @@ func TestReviewStoreStats(t *testing.T) {
 }
 
 func TestReviewStoreListsStoredEmailsByCategory(t *testing.T) {
-	store, err := NewReviewStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := newTestReviewStore(t)
 	now := time.Now().UTC()
 	emails := []domain.EmailSummary{
 		{
@@ -147,10 +132,7 @@ func TestReviewStoreListsStoredEmailsByCategory(t *testing.T) {
 }
 
 func TestReviewStoreDeleteClassifications(t *testing.T) {
-	store, err := NewReviewStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := newTestReviewStore(t)
 	emails := []domain.EmailSummary{
 		{ID: "email-1", Category: domain.CategoryUnwanted},
 		{ID: "email-2", Category: domain.CategoryUnwanted},
@@ -178,10 +160,7 @@ func TestReviewStoreDeleteClassifications(t *testing.T) {
 }
 
 func TestReviewStoreListEmailsPaginates(t *testing.T) {
-	store, err := NewReviewStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := newTestReviewStore(t)
 	now := time.Now().UTC()
 	emails := []domain.EmailSummary{
 		{ID: "email-1", ReceivedAt: now.Add(-2 * time.Hour), Category: domain.CategoryUnwanted},
@@ -201,10 +180,7 @@ func TestReviewStoreListEmailsPaginates(t *testing.T) {
 }
 
 func TestReviewStoreAppliesSenderRules(t *testing.T) {
-	store, err := NewReviewStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	store := newTestReviewStore(t)
 	if err := store.SaveSenderRules([]domain.EmailSummary{{From: "Deals <deals@example.com>"}}, domain.CategoryUnwanted); err != nil {
 		t.Fatalf("save rule: %v", err)
 	}
@@ -226,4 +202,18 @@ func TestReviewStoreAppliesSenderRules(t *testing.T) {
 	if stats.SenderRules != 1 {
 		t.Fatalf("expected one sender rule, got %d", stats.SenderRules)
 	}
+}
+
+func newTestReviewStore(t *testing.T) *ReviewStore {
+	t.Helper()
+	store, err := NewReviewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("close store: %v", err)
+		}
+	})
+	return store
 }

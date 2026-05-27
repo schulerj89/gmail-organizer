@@ -16,6 +16,11 @@ type Config struct {
 	GoogleClientSecretFile string
 	OpenAIKeyFile          string
 	OpenAIModel            string
+	OpenAIMaxOutputTokens  int
+	OpenAIMaxRetries       int
+	OpenAIRequestDelayMs   int
+	OpenAIChunkSize        int
+	OpenAITimeoutSeconds   int
 	EnableOpenAI           bool
 	FrontendDistDir        string
 	OAuthRedirectURLValue  string
@@ -36,6 +41,11 @@ func Load() (Config, error) {
 		Port:                  port,
 		DataDir:               stringFromEnv("GMAIL_ORGANIZER_DATA_DIR", filepath.Join(root, "data")),
 		OpenAIModel:           stringFromEnv("OPENAI_MODEL", "gpt-5-mini"),
+		OpenAIMaxOutputTokens: intFromEnv("OPENAI_MAX_OUTPUT_TOKENS", 2000),
+		OpenAIMaxRetries:      intFromEnv("OPENAI_MAX_RETRIES", 3),
+		OpenAIRequestDelayMs:  intFromEnv("OPENAI_REQUEST_DELAY_MS", 1200),
+		OpenAIChunkSize:       intFromEnv("OPENAI_CLASSIFY_CHUNK_SIZE", 25),
+		OpenAITimeoutSeconds:  intFromEnv("OPENAI_TIMEOUT_SECONDS", 45),
 		EnableOpenAI:          boolFromEnv("GMAIL_ORGANIZER_ENABLE_OPENAI", true),
 		FrontendDistDir:       stringFromEnv("GMAIL_ORGANIZER_FRONTEND_DIST", filepath.Join(root, "web", "dist")),
 		OAuthRedirectURLValue: stringFromEnv("GMAIL_ORGANIZER_OAUTH_REDIRECT_URL", ""),
@@ -64,6 +74,36 @@ func Load() (Config, error) {
 	}
 	if cfg.ScanCacheLimit < 100 {
 		cfg.ScanCacheLimit = 100
+	}
+	if cfg.OpenAIMaxOutputTokens < 256 {
+		cfg.OpenAIMaxOutputTokens = 256
+	}
+	if cfg.OpenAIMaxOutputTokens > 8000 {
+		cfg.OpenAIMaxOutputTokens = 8000
+	}
+	if cfg.OpenAIMaxRetries < 0 {
+		cfg.OpenAIMaxRetries = 0
+	}
+	if cfg.OpenAIMaxRetries > 6 {
+		cfg.OpenAIMaxRetries = 6
+	}
+	if cfg.OpenAIRequestDelayMs < 0 {
+		cfg.OpenAIRequestDelayMs = 0
+	}
+	if cfg.OpenAIRequestDelayMs > 30000 {
+		cfg.OpenAIRequestDelayMs = 30000
+	}
+	if cfg.OpenAIChunkSize < 1 {
+		cfg.OpenAIChunkSize = 1
+	}
+	if cfg.OpenAIChunkSize > 50 {
+		cfg.OpenAIChunkSize = 50
+	}
+	if cfg.OpenAITimeoutSeconds < 10 {
+		cfg.OpenAITimeoutSeconds = 10
+	}
+	if cfg.OpenAITimeoutSeconds > 120 {
+		cfg.OpenAITimeoutSeconds = 120
 	}
 	return cfg, nil
 }
