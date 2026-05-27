@@ -24,3 +24,6 @@ AI review:
 2. Run AI Review.
 3. Work the "Needs review" queue by accepting category/action recommendations or moving individual messages.
 
+## 2026-05-27: Quick Cleanup Queues
+
+Expose "Ready to unsubscribe" and "Suggested cleanup" as top-level queues above saved categories. These queues speak in outcomes and let the user begin from a cleanup intent instead of first understanding the category model.

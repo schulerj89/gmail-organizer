@@ -17,8 +17,10 @@ This is the initial working slice. It includes:
 - Heuristic categorization and optional OpenAI Responses API categorization.
 - First-run guided dashboard tutorial with local browser storage for completed/skipped state and a restart control.
 - Left-nav cleanup workbench with one contained email queue instead of long category lanes.
+- Quick cleanup queues for unsubscribe-ready messages and suggested cleanup candidates.
 - Email detail dialog with sender, subject, snippet, category reason, unsubscribe availability, and single-message actions.
 - Contextual bulk action bar that appears only after selecting emails.
+- Modal preview and confirmation flow for unsubscribe and move-to-trash actions.
 - Saved category totals and left-nav category loading for SQLite-backed review pages.
 - User-friendly Gmail date search presets plus custom before/after calendar date controls.
 - Explicit AI toggle for scan/monitor jobs with bounded backend AI classification chunks.

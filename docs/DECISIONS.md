@@ -75,3 +75,7 @@ The dashboard is moving from a lane board to a contained cleanup workbench. The 
 This first pass keeps the backend API stable and uses local CSS plus `lucide-react` rather than adding Material UI immediately. The intended Material-like behavior is contained scrolling, visible navigation, contextual actions, and progressive disclosure for advanced controls.
 
 Implementation labels should favor user language over storage or API language: "Saved emails" instead of "Persisted review state", "Find Emails" instead of "Scan", "Visible results" instead of "Max", "Use AI" instead of "AI jobs", and "Move to Trash" instead of "Trash".
+
+Quick cleanup queues now sit above saved categories in the left nav. They support the target 3-step workflow: pick a cleanup queue, select or open messages, then preview and confirm the action.
+
+Cleanup previews and confirmations are shown in a modal workflow instead of an inline panel. This keeps destructive or external-contacting actions focused, preserves the existing backend confirmation token safety model, and makes unsubscribe/delete feel like a guided flow.

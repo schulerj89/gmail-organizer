@@ -12,3 +12,6 @@ Open a modal for email context instead of expanding cards inline. The modal keep
 
 Show bulk cleanup actions in a sticky selection bar only after at least one message is selected. This reduces idle clutter and makes the next step explicit.
 
+## 2026-05-27: Preview Confirmation Modal
+
+Show unsubscribe and move-to-trash previews in a modal instead of an inline page panel. The modal is the third step in the cleanup flow and should include the affected count, risk note, representative results, and confirm/cancel actions.

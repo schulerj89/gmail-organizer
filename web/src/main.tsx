@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Archive, Bot, Check, CircleHelp, Database, Eye, Inbox, LoaderCircle, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi, X } from "lucide-react";
+import { Archive, Bot, Check, CircleHelp, Eye, Inbox, LoaderCircle, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi, X } from "lucide-react";
 import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchReviewEmails, fetchReviewStats, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
 import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
 import "./styles.css";
@@ -25,6 +25,8 @@ type PendingAction = {
   confirmationToken: string;
   confirmationExpiresAt?: string;
 };
+
+type QueueMode = "category" | "unsubscribe" | "cleanup";
 
 type DateFilterId =
   | "last_7d"
@@ -116,6 +118,7 @@ function App() {
   const [max, setMax] = useState(50);
   const [scanLimit, setScanLimit] = useState(1000);
   const [activeCategory, setActiveCategory] = useState<Category>("needs_review");
+  const [queueMode, setQueueMode] = useState<QueueMode>("category");
   const [detailEmailId, setDetailEmailId] = useState<string | null>(null);
   const [targetCategory, setTargetCategory] = useState<Category>("needs_review");
   const [storedCategory, setStoredCategory] = useState<Category>("unwanted");
@@ -164,11 +167,18 @@ function App() {
 
   const selectedEmails = useMemo(() => emails.filter((email) => selected.has(email.id)), [emails, selected]);
   const visibleEmails = useMemo(() => {
+    if (queueMode === "unsubscribe") {
+      return emails.filter((email) => email.hasUnsubscribe);
+    }
+    if (queueMode === "cleanup") {
+      return emails.filter((email) => ["promotions", "newsletters", "unwanted"].includes(email.category));
+    }
     if (source === "review_store") {
       return emails;
     }
     return emails.filter((email) => email.category === activeCategory);
-  }, [activeCategory, emails, source]);
+  }, [activeCategory, emails, queueMode, source]);
+  const activeQueueTitle = queueMode === "unsubscribe" ? "Ready to unsubscribe" : queueMode === "cleanup" ? "Suggested cleanup" : categoryLabel(activeCategory);
   const detailEmail = useMemo(() => emails.find((email) => email.id === detailEmailId) ?? null, [detailEmailId, emails]);
   const activeQuery = useMemo(() => buildGmailQuery(dateFilter, customDate, query), [dateFilter, customDate, query]);
   const selectedDateFilter = dateFilters.find((item) => item.id === dateFilter);
@@ -205,6 +215,7 @@ function App() {
       const result = await fetchEmails(activeQuery, max);
       setEmails(result.emails);
       setSource(result.source);
+      setQueueMode("category");
       setSelected(new Set());
       setPendingAction(null);
       setStoredPage(null);
@@ -224,6 +235,7 @@ function App() {
       setSource(result.source);
       setStoredPage(result);
       setActiveCategory(category);
+      setQueueMode("category");
       setSelected(new Set());
       setPendingAction(null);
       setNotice(`Opened ${result.emails.length} of ${result.total} saved ${categoryLabel(category)} email(s).`);
@@ -344,7 +356,7 @@ function App() {
           throw new Error("Server did not return a confirmation token.");
         }
         setPendingAction({ action, ids, confirmationToken: result.confirmationToken, confirmationExpiresAt: result.confirmationExpiresAt });
-        setNotice(`${result.results.length} action preview(s). Confirm to execute ${actionLabel(action)}.`);
+        setNotice("");
       } else {
         finishAction(action, result.results);
       }
@@ -376,6 +388,11 @@ function App() {
     setPendingAction(null);
     setActionResults([]);
     setNotice("Pending cleanup action cancelled.");
+  }
+
+  function closeActionResults() {
+    setPendingAction(null);
+    setActionResults([]);
   }
 
   function finishAction(action: "trash" | "mark_read" | "unsubscribe", results: ActionResult[]) {
@@ -521,36 +538,41 @@ function App() {
         {monitor && <span>{monitor.running ? "Monitoring on" : "Monitoring off"} - {monitor.useAI ? "AI" : "Local"}</span>}
       </section>
 
-      {actionResults.length > 0 && (
-        <section className="action-results" data-tour="confirmation">
-          {pendingAction && (
-            <div className="confirm-row">
-              <strong>{actionLabel(pendingAction.action)} pending</strong>
-              <span>{pendingAction.ids.length} email(s){pendingAction.confirmationExpiresAt ? ` until ${new Date(pendingAction.confirmationExpiresAt).toLocaleTimeString()}` : ""}</span>
-              <button className="danger" onClick={confirmPendingAction} disabled={busy} title="Execute the previewed cleanup action">Confirm</button>
-              <button onClick={cancelPendingAction} disabled={busy} title="Cancel the pending cleanup action">Cancel</button>
-            </div>
-          )}
-          {actionResults.map((result, index) => (
-            <div key={`${result.emailId}-${result.status}-${index}`} className="action-result">
-              <strong>{result.status}</strong>
-              <span>{result.message || result.emailId}</span>
-              {result.safeLink && <a href={result.safeLink} target="_blank" rel="noreferrer">Open review link</a>}
-            </div>
-          ))}
-        </section>
-      )}
-
       <section className="workspace">
         <aside className="left-nav" aria-label="Cleanup sections">
-          <div className="nav-section-title"><Inbox size={16} />Cleanup</div>
+          <div className="nav-section-title"><Inbox size={16} />Quick cleanup</div>
+          <button
+            className={queueMode === "unsubscribe" ? "nav-item active" : "nav-item"}
+            onClick={() => {
+              setQueueMode("unsubscribe");
+              setSelected(new Set());
+            }}
+          >
+            <span>Ready to unsubscribe</span>
+            <span>{emails.filter((email) => email.hasUnsubscribe).length}</span>
+          </button>
+          <button
+            className={queueMode === "cleanup" ? "nav-item active" : "nav-item"}
+            onClick={() => {
+              setQueueMode("cleanup");
+              setSelected(new Set());
+            }}
+          >
+            <span>Suggested cleanup</span>
+            <span>{emails.filter((email) => ["promotions", "newsletters", "unwanted"].includes(email.category)).length}</span>
+          </button>
+          <div className="workflow-hint">
+            <strong>3-step cleanup</strong>
+            <span>Pick a queue, select or open emails, then preview and confirm.</span>
+          </div>
+          <div className="nav-section-title">Saved categories</div>
           {categories.map((category) => {
             const visibleCount = grouped.get(category.id)?.length ?? 0;
             const storedCount = reviewStats?.byCategory[category.id] ?? 0;
             return (
               <button
                 key={category.id}
-                className={activeCategory === category.id ? "nav-item active" : "nav-item"}
+                className={queueMode === "category" && activeCategory === category.id ? "nav-item active" : "nav-item"}
                 onClick={() => {
                   setStoredCategory(category.id);
                   void loadStoredEmails(0, category.id);
@@ -566,8 +588,8 @@ function App() {
         <section className="mail-workbench" data-tour="lane">
           <header className="workbench-header">
             <div>
-              <h2>{categoryLabel(activeCategory)}</h2>
-              <p>{visibleEmails.length} visible - {reviewStats?.byCategory[activeCategory] ?? 0} saved - {sourceLabel(source)}</p>
+              <h2>{activeQueueTitle}</h2>
+              <p>{visibleEmails.length} visible - {queueMode === "category" ? `${reviewStats?.byCategory[activeCategory] ?? 0} saved - ` : ""}{sourceLabel(source)}</p>
             </div>
             <div className="workbench-actions" data-tour="categorize">
               <button onClick={() => classify(false)} disabled={busy || emails.length === 0} title="Sort loaded emails with local rules"><Archive size={16} />Sort Emails</button>
@@ -620,6 +642,17 @@ function App() {
           onMarkRead={() => bulk("mark_read", [detailEmail.id])}
           onUnsubscribe={() => bulk("unsubscribe", [detailEmail.id])}
           onTrash={() => bulk("trash", [detailEmail.id])}
+        />
+      )}
+
+      {actionResults.length > 0 && (
+        <ActionResultsModal
+          pendingAction={pendingAction}
+          results={actionResults}
+          busy={busy}
+          onConfirm={confirmPendingAction}
+          onCancel={cancelPendingAction}
+          onClose={closeActionResults}
         />
       )}
 
@@ -806,6 +839,66 @@ function EmailDetailModal({ email, selected, onClose, onToggle, onMarkRead, onUn
           <button onClick={onMarkRead}><MailCheck size={16} />Mark Read</button>
           <button onClick={onUnsubscribe} disabled={!email.hasUnsubscribe}><Unlink size={16} />Unsubscribe</button>
           <button className="danger" onClick={onTrash}><Trash2 size={16} />Move to Trash</button>
+        </footer>
+      </aside>
+    </div>
+  );
+}
+
+function ActionResultsModal({ pendingAction, results, busy, onConfirm, onCancel, onClose }: { pendingAction: PendingAction | null; results: ActionResult[]; busy: boolean; onConfirm: () => void; onCancel: () => void; onClose: () => void }) {
+  const preparedLinks = results.filter((result) => result.safeLink);
+  const title = pendingAction ? `Preview ${actionLabel(pendingAction.action)}` : "Action results";
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        pendingAction ? onCancel() : onClose();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel, onClose, pendingAction]);
+
+  return (
+    <div className="detail-backdrop" role="presentation" onMouseDown={pendingAction ? undefined : onClose}>
+      <aside className="action-modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()} data-tour="confirmation">
+        <header>
+          <div>
+            <span className="detail-eyebrow">{pendingAction ? "Step 3 of 3" : "Done"}</span>
+            <h2>{title}</h2>
+            <p>{pendingAction ? `${pendingAction.ids.length} email(s) will be affected. Review the preview before confirming.` : `${results.length} result(s) returned.`}</p>
+          </div>
+          <button className="icon-button" onClick={pendingAction ? onCancel : onClose} aria-label="Close action results"><X size={18} /></button>
+        </header>
+
+        {pendingAction && (
+          <div className="risk-note">
+            <strong>{pendingAction.action === "trash" ? "Move to Trash is recoverable in Gmail for a limited time." : "One-click unsubscribe can contact sender unsubscribe endpoints."}</strong>
+            <span>{pendingAction.confirmationExpiresAt ? `Confirmation expires at ${new Date(pendingAction.confirmationExpiresAt).toLocaleTimeString()}.` : "Confirm only if this preview looks right."}</span>
+          </div>
+        )}
+
+        <div className="action-result-list">
+          {results.slice(0, 12).map((result, index) => (
+            <div key={`${result.emailId}-${result.status}-${index}`} className="action-result">
+              <strong>{result.status}</strong>
+              <span>{result.message || result.emailId}</span>
+              {result.safeLink && <a href={result.safeLink} target="_blank" rel="noreferrer">Open review link</a>}
+            </div>
+          ))}
+          {results.length > 12 && <p className="result-overflow">Showing 12 of {results.length} results.</p>}
+        </div>
+
+        <footer className="detail-actions">
+          {preparedLinks.length > 0 && <span className="prepared-links">{preparedLinks.length} review link(s) ready</span>}
+          {pendingAction ? (
+            <>
+              <button onClick={onCancel} disabled={busy}>Cancel</button>
+              <button className="danger" onClick={onConfirm} disabled={busy}>{pendingAction.action === "trash" ? "Confirm Move to Trash" : "Confirm Unsubscribe"}</button>
+            </>
+          ) : (
+            <button onClick={onClose}>Done</button>
+          )}
         </footer>
       </aside>
     </div>
