@@ -92,6 +92,22 @@ func TestSuccessfulActionIDs(t *testing.T) {
 	}
 }
 
+func TestSummarizeActionResults(t *testing.T) {
+	got := summarizeActionResults([]domain.ActionResult{
+		{EmailID: "a", Status: "trashed"},
+		{EmailID: "b", Status: "failed"},
+		{EmailID: "c", Status: "needs_confirmation"},
+		{EmailID: "d", Status: "skipped"},
+		{EmailID: "e", Status: "blocked"},
+	})
+	if got.Total != 5 || got.Succeeded != 1 || got.Failed != 1 || got.Pending != 1 || got.Skipped != 2 {
+		t.Fatalf("unexpected summary: %#v", got)
+	}
+	if got.ByStatus["trashed"] != 1 || got.ByStatus["blocked"] != 1 {
+		t.Fatalf("unexpected status counts: %#v", got.ByStatus)
+	}
+}
+
 func TestForgetRemovesRememberedEmails(t *testing.T) {
 	server := &Server{}
 	server.remember([]domain.EmailSummary{{ID: "a"}, {ID: "b"}, {ID: "c"}})

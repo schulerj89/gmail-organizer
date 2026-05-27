@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Archive, Bot, Check, CircleHelp, Eye, Inbox, LoaderCircle, MailCheck, Moon, MoveRight, RefreshCcw, Search, Shield, Sun, Trash2, Unlink, Wifi, X } from "lucide-react";
 import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchReviewEmails, fetchReviewStats, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
-import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
+import type { ActionResult, ActionSummary, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
 import "./styles.css";
 
 const categories: { id: Category; label: string }[] = [
@@ -156,6 +156,7 @@ function App() {
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null);
   const [storedPage, setStoredPage] = useState<ReviewEmailPage | null>(null);
   const [actionResults, setActionResults] = useState<ActionResult[]>([]);
+  const [actionSummary, setActionSummary] = useState<ActionSummary | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [tutorialStep, setTutorialStep] = useState<number | null>(null);
   const [loadingScreen, setLoadingScreen] = useState<{ title: string; body: string } | null>(null);
@@ -225,6 +226,7 @@ function App() {
       return;
     }
     setActionResults([]);
+    setActionSummary(null);
     setPendingAction(null);
 
     if (activeTutorialStep.queue && queueMode !== activeTutorialStep.queue) {
@@ -404,6 +406,7 @@ function App() {
     try {
       const result = await runAction(action, ids);
       setActionResults(result.results);
+      setActionSummary(result.summary ?? summarizeActionResults(result.results));
       if (result.requiresConfirmation && (action === "trash" || action === "unsubscribe")) {
         if (!result.confirmationToken) {
           throw new Error("Server did not return a confirmation token.");
@@ -427,8 +430,10 @@ function App() {
     setBusy(true);
     try {
       const result = await runAction(pendingAction.action, pendingAction.ids, pendingAction.confirmationToken);
+      const summary = result.summary ?? summarizeActionResults(result.results);
       setActionResults(result.results);
-      finishAction(pendingAction.action, result.results);
+      setActionSummary(summary);
+      finishAction(pendingAction.action, result.results, summary);
       setPendingAction(null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Bulk action failed.");
@@ -440,18 +445,25 @@ function App() {
   function cancelPendingAction() {
     setPendingAction(null);
     setActionResults([]);
+    setActionSummary(null);
     setNotice("Pending cleanup action cancelled.");
   }
 
   function closeActionResults() {
     setPendingAction(null);
     setActionResults([]);
+    setActionSummary(null);
   }
 
-  function finishAction(action: "trash" | "mark_read" | "unsubscribe", results: ActionResult[]) {
+  function finishAction(action: "trash" | "mark_read" | "unsubscribe", results: ActionResult[], summary = summarizeActionResults(results)) {
     const preparedLinks = results.filter((item) => item.safeLink);
-    const executed = results.filter((item) => item.status === "unsubscribed");
-    setNotice(`${results.length} action result(s). ${executed.length ? `${executed.length} one-click unsubscribe request(s) accepted. ` : ""}${preparedLinks.length ? "Review links are ready below." : ""}`);
+    if (action === "trash") {
+      setNotice(`${summary.succeeded} message(s) moved to Gmail Trash. ${summary.failed ? `${summary.failed} failed. ` : ""}${summary.skipped ? `${summary.skipped} skipped. ` : ""}`);
+    } else if (action === "mark_read") {
+      setNotice(`${summary.succeeded} message(s) marked read. ${summary.failed ? `${summary.failed} failed. ` : ""}`);
+    } else {
+      setNotice(`${summary.succeeded} one-click unsubscribe request(s) accepted. ${summary.failed ? `${summary.failed} failed. ` : ""}${summary.skipped ? `${summary.skipped} skipped. ` : ""}${preparedLinks.length ? "Review links are ready below." : ""}`);
+    }
     if (action === "trash") {
       const trashed = new Set(results.filter((item) => item.status === "trashed").map((item) => item.emailId));
       setEmails((current) => current.filter((email) => !trashed.has(email.id)));
@@ -793,6 +805,7 @@ function App() {
         <ActionResultsModal
           pendingAction={pendingAction}
           results={actionResults}
+          summary={actionSummary ?? summarizeActionResults(actionResults)}
           busy={busy}
           onConfirm={confirmPendingAction}
           onCancel={cancelPendingAction}
@@ -914,6 +927,37 @@ function actionLabel(action: "trash" | "mark_read" | "unsubscribe") {
     return "unsubscribe";
   }
   return "mark read";
+}
+
+function summarizeActionResults(results: ActionResult[]): ActionSummary {
+  return results.reduce<ActionSummary>((summary, result) => {
+    const status = result.status || "unknown";
+    summary.total += 1;
+    summary.byStatus[status] = (summary.byStatus[status] ?? 0) + 1;
+    if (["trashed", "marked_read", "unsubscribed"].includes(status)) {
+      summary.succeeded += 1;
+    } else if (status === "needs_confirmation") {
+      summary.pending += 1;
+    } else if (status === "skipped" || status === "blocked") {
+      summary.skipped += 1;
+    } else {
+      summary.failed += 1;
+    }
+    return summary;
+  }, { total: 0, succeeded: 0, failed: 0, skipped: 0, pending: 0, byStatus: {} });
+}
+
+function actionResultTone(status: string) {
+  if (["trashed", "marked_read", "unsubscribed"].includes(status)) {
+    return "success";
+  }
+  if (status === "needs_confirmation") {
+    return "pending";
+  }
+  if (status === "skipped" || status === "blocked") {
+    return "muted";
+  }
+  return "failed";
 }
 
 function TutorialOverlay({ step, index, total, onNext, onSkip }: { step: { title: string; body: string }; index: number; total: number; onNext: () => void; onSkip: () => void }) {
@@ -1104,7 +1148,7 @@ function EmailDetailModal({ email, selected, categories, onClose, onToggle, onMo
   );
 }
 
-function ActionResultsModal({ pendingAction, results, busy, onConfirm, onCancel, onClose }: { pendingAction: PendingAction | null; results: ActionResult[]; busy: boolean; onConfirm: () => void; onCancel: () => void; onClose: () => void }) {
+function ActionResultsModal({ pendingAction, results, summary, busy, onConfirm, onCancel, onClose }: { pendingAction: PendingAction | null; results: ActionResult[]; summary: ActionSummary; busy: boolean; onConfirm: () => void; onCancel: () => void; onClose: () => void }) {
   const preparedLinks = results.filter((result) => result.safeLink);
   const title = pendingAction ? `Preview ${actionLabel(pendingAction.action)}` : "Action results";
 
@@ -1137,9 +1181,17 @@ function ActionResultsModal({ pendingAction, results, busy, onConfirm, onCancel,
           </div>
         )}
 
+        <div className="action-summary">
+          <span><strong>{summary.total}</strong>Total</span>
+          <span><strong>{summary.succeeded}</strong>Done</span>
+          <span><strong>{summary.failed}</strong>Failed</span>
+          <span><strong>{summary.skipped}</strong>Skipped</span>
+          {summary.pending > 0 && <span><strong>{summary.pending}</strong>Awaiting confirm</span>}
+        </div>
+
         <div className="action-result-list">
           {results.slice(0, 12).map((result, index) => (
-            <div key={`${result.emailId}-${result.status}-${index}`} className="action-result">
+            <div key={`${result.emailId}-${result.status}-${index}`} className={`action-result ${actionResultTone(result.status)}`}>
               <strong>{result.status}</strong>
               <span>{result.message || result.emailId}</span>
               {result.safeLink && <a href={result.safeLink} target="_blank" rel="noreferrer">Open review link</a>}

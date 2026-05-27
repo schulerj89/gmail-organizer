@@ -93,9 +93,19 @@ export type ActionResult = {
   safeLink?: string;
 };
 
+export type ActionSummary = {
+  total: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  pending: number;
+  byStatus: Record<string, number>;
+};
+
 export type ActionResponse = {
   results: ActionResult[];
   requiresConfirmation: boolean;
+  summary?: ActionSummary;
   confirmationToken?: string;
   confirmationExpiresAt?: string;
 };

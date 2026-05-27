@@ -231,7 +231,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		requires := requiresConfirmation(results)
-		response := map[string]any{"results": results, "requiresConfirmation": requires}
+		response := map[string]any{"results": results, "requiresConfirmation": requires, "summary": summarizeActionResults(results)}
 		if requires {
 			token, expiresAt := s.createConfirmation(payload.Action, ids)
 			response["confirmationToken"] = token
@@ -270,7 +270,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 			s.forget(trashedIDs)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"results": results, "requiresConfirmation": false})
+	writeJSON(w, http.StatusOK, map[string]any{"results": results, "requiresConfirmation": false, "summary": summarizeActionResults(results)})
 }
 
 func (s *Server) previewAction(action domain.BulkAction, ids []string) ([]domain.ActionResult, error) {
@@ -537,6 +537,31 @@ func successfulActionIDs(results []domain.ActionResult, status string) []string 
 		}
 	}
 	return ids
+}
+
+func summarizeActionResults(results []domain.ActionResult) domain.ActionSummary {
+	summary := domain.ActionSummary{
+		Total:    len(results),
+		ByStatus: map[string]int{},
+	}
+	for _, result := range results {
+		status := strings.TrimSpace(result.Status)
+		if status == "" {
+			status = "unknown"
+		}
+		summary.ByStatus[status]++
+		switch status {
+		case "trashed", "marked_read", "unsubscribed":
+			summary.Succeeded++
+		case "needs_confirmation":
+			summary.Pending++
+		case "skipped", "blocked":
+			summary.Skipped++
+		default:
+			summary.Failed++
+		}
+	}
+	return summary
 }
 
 func (s *Server) createConfirmation(action domain.BulkAction, ids []string) (string, time.Time) {

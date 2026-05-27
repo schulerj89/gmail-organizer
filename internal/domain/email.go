@@ -75,3 +75,12 @@ type ActionResult struct {
 	Message  string `json:"message,omitempty"`
 	SafeLink string `json:"safeLink,omitempty"`
 }
+
+type ActionSummary struct {
+	Total     int            `json:"total"`
+	Succeeded int            `json:"succeeded"`
+	Failed    int            `json:"failed"`
+	Skipped   int            `json:"skipped"`
+	Pending   int            `json:"pending"`
+	ByStatus  map[string]int `json:"byStatus"`
+}

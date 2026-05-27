@@ -423,9 +423,13 @@ button:disabled {
 
 .action-result {
   align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   display: grid;
   gap: 8px;
   grid-template-columns: minmax(150px, auto) minmax(0, 1fr) auto;
+  padding: 9px 10px;
 }
 
 .confirm-row {
@@ -447,8 +451,23 @@ button:disabled {
   font-size: 13px;
 }
 
-.action-result strong {
+.action-result.success strong {
   color: var(--success-strong);
+}
+
+.action-result.failed strong {
+  color: var(--danger);
+}
+
+.action-result.pending strong {
+  color: var(--warning);
+}
+
+.action-result.muted strong {
+  color: var(--muted);
+}
+
+.action-result strong {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
@@ -882,6 +901,30 @@ button:disabled {
 .risk-note strong,
 .risk-note span {
   font-size: 13px;
+}
+
+.action-summary {
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 18px;
+}
+
+.action-summary span {
+  align-items: center;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-soft);
+  display: inline-flex;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
+.action-summary strong {
+  color: var(--text);
 }
 
 .action-result-list {
