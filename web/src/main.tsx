@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Archive, Bot, Check, CircleHelp, Database, LoaderCircle, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
+import { Archive, Bot, Check, CircleHelp, Database, Eye, Inbox, LoaderCircle, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi, X } from "lucide-react";
 import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchReviewEmails, fetchReviewStats, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
 import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
 import "./styles.css";
 
 const categories: { id: Category; label: string }[] = [
-  { id: "needs_review", label: "Needs review" },
+  { id: "needs_review", label: "Review needed" },
   { id: "promotions", label: "Promotions" },
   { id: "newsletters", label: "Newsletters" },
   { id: "receipts", label: "Receipts" },
@@ -15,7 +15,8 @@ const categories: { id: Category; label: string }[] = [
   { id: "work", label: "Work" },
   { id: "travel", label: "Travel" },
   { id: "social", label: "Social" },
-  { id: "unwanted", label: "Unwanted" }
+  { id: "personal", label: "Personal" },
+  { id: "unwanted", label: "Likely junk" }
 ];
 
 type PendingAction = {
@@ -61,12 +62,12 @@ const tutorialSteps = [
   {
     target: "query",
     title: "Mailbox scope",
-    body: "The date dropdown and optional extra Gmail terms create the search query. Max controls the visible page size, and scan limit controls larger background coverage without keeping everything in browser memory."
+    body: "Choose a date range and optional search terms without remembering Gmail operators. Refresh loads the visible queue, and Find Emails saves more matching results for cleanup."
   },
   {
     target: "scan-monitor",
-    title: "Scan and monitor",
-    body: "Scan pages through Gmail metadata and persists classifications into SQLite. Monitor polls for incoming mail and classifies it into the same review state."
+    title: "Advanced controls",
+    body: "Advanced settings hold power-user controls like visible result count, emails to check, monitoring, and whether new searches should use AI."
   },
   {
     target: "categorize",
@@ -74,9 +75,9 @@ const tutorialSteps = [
     body: "Categorize uses fast local rules. AI Categorize sends bounded metadata chunks through OpenAI for harder messages while keeping prompts, output tokens, and retries controlled."
   },
   {
-    target: "stored",
-    title: "Stored review pages",
-    body: "Stored reloads a category page from SQLite. Lane Load buttons do the same thing directly, which lets you work through cleanup pages without rescanning Gmail."
+    target: "lane",
+    title: "Saved category pages",
+    body: "Use the left navigation to open saved results for a category. This lets you keep working through cleanup queues without rescanning Gmail."
   },
   {
     target: "coverage",
@@ -85,23 +86,23 @@ const tutorialSteps = [
   },
   {
     target: "lane",
-    title: "Category lanes",
-    body: "Each lane shows visible emails and the stored total for that category. Click a card to select it, All selects the visible lane, and Load pulls that stored category page."
+    title: "Focused queue",
+    body: "The old lanes are now one focused queue. Pick a category on the left, select messages for bulk cleanup, or open a row for more context."
   },
   {
-    target: "move",
+    target: "lane",
     title: "Manual corrections",
-    body: "Move selected messages into the target category. Leave Sender enabled when future messages from that sender should automatically land in the same category."
+    body: "Select messages to reveal the bulk action bar. From there you can move them, apply future sender rules, mark read, unsubscribe, or move them to trash."
   },
   {
-    target: "cleanup",
+    target: "lane",
     title: "Cleanup actions",
-    body: "Read marks selected messages read. Unsubscribe prepares safe review links or one-click requests. Trash moves selected messages to Gmail trash, not permanent delete."
+    body: "Open any row for more context before acting. The detail dialog supports single-message mark read, unsubscribe, and move-to-trash actions."
   },
   {
-    target: "confirmation",
+    target: "lane",
     title: "Destructive confirmation",
-    body: "Trash and one-click unsubscribe preview first. If a cleanup could change Gmail or contact an unsubscribe endpoint, the app requires confirmation before it executes."
+    body: "Move to Trash and one-click unsubscribe preview first. If a cleanup could change Gmail or contact an unsubscribe endpoint, the app asks for confirmation before it executes."
   }
 ];
 
@@ -114,6 +115,8 @@ function App() {
   const [query, setQuery] = useState("");
   const [max, setMax] = useState(50);
   const [scanLimit, setScanLimit] = useState(1000);
+  const [activeCategory, setActiveCategory] = useState<Category>("needs_review");
+  const [detailEmailId, setDetailEmailId] = useState<string | null>(null);
   const [targetCategory, setTargetCategory] = useState<Category>("needs_review");
   const [storedCategory, setStoredCategory] = useState<Category>("unwanted");
   const [applySenderRule, setApplySenderRule] = useState(true);
@@ -160,6 +163,13 @@ function App() {
   }, [emails]);
 
   const selectedEmails = useMemo(() => emails.filter((email) => selected.has(email.id)), [emails, selected]);
+  const visibleEmails = useMemo(() => {
+    if (source === "review_store") {
+      return emails;
+    }
+    return emails.filter((email) => email.category === activeCategory);
+  }, [activeCategory, emails, source]);
+  const detailEmail = useMemo(() => emails.find((email) => email.id === detailEmailId) ?? null, [detailEmailId, emails]);
   const activeQuery = useMemo(() => buildGmailQuery(dateFilter, customDate, query), [dateFilter, customDate, query]);
   const selectedDateFilter = dateFilters.find((item) => item.id === dateFilter);
   const showCustomDate = Boolean(selectedDateFilter?.operator);
@@ -178,6 +188,12 @@ function App() {
     target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
     return () => target.classList.remove("tour-highlight");
   }, [activeTutorialStep]);
+
+  useEffect(() => {
+    if (detailEmailId && !emails.some((email) => email.id === detailEmailId)) {
+      setDetailEmailId(null);
+    }
+  }, [detailEmailId, emails]);
 
   async function loadConfig() {
     setConfig(await fetchConfig());
@@ -207,9 +223,10 @@ function App() {
       setEmails(result.emails);
       setSource(result.source);
       setStoredPage(result);
+      setActiveCategory(category);
       setSelected(new Set());
       setPendingAction(null);
-      setNotice(`Loaded ${result.emails.length} of ${result.total} stored ${categoryLabel(category)} email(s).`);
+      setNotice(`Opened ${result.emails.length} of ${result.total} saved ${categoryLabel(category)} email(s).`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Failed to load stored review emails.");
     } finally {
@@ -311,8 +328,8 @@ function App() {
     }
   }
 
-  async function bulk(action: "trash" | "mark_read" | "unsubscribe") {
-    const ids = Array.from(selected);
+  async function bulk(action: "trash" | "mark_read" | "unsubscribe", overrideIds?: string[]) {
+    const ids = overrideIds ?? Array.from(selected);
     if (ids.length === 0) {
       setNotice("Select at least one email first.");
       return;
@@ -369,6 +386,9 @@ function App() {
       const trashed = new Set(results.filter((item) => item.status === "trashed").map((item) => item.emailId));
       setEmails((current) => current.filter((email) => !trashed.has(email.id)));
       setSelected((current) => new Set(Array.from(current).filter((id) => !trashed.has(id))));
+      if (detailEmailId && trashed.has(detailEmailId)) {
+        setDetailEmailId(null);
+      }
     }
   }
 
@@ -400,13 +420,17 @@ function App() {
     });
   }
 
-  function selectLane(category: Category) {
-    const laneIds = emails.filter((email) => email.category === category).map((email) => email.id);
+  function selectVisibleEmails() {
+    const visibleIds = visibleEmails.map((email) => email.id);
     setSelected((current) => {
       const next = new Set(current);
-      laneIds.forEach((id) => next.add(id));
+      visibleIds.forEach((id) => next.add(id));
       return next;
     });
+  }
+
+  function clearSelected() {
+    setSelected(new Set());
   }
 
   function restartTutorial() {
@@ -436,7 +460,7 @@ function App() {
       <section className="topbar">
         <div>
           <h1>Gmail Organizer</h1>
-          <p>{sourceLabel(source)} - {emails.length} emails - {selected.size} selected</p>
+          <p>{sourceLabel(source)} - {emails.length} loaded - {selected.size} selected</p>
         </div>
         <div className="status-row">
           <button className="tutorial-button" onClick={restartTutorial} title="Restart the guided dashboard tutorial"><CircleHelp size={16} />Tutorial</button>
@@ -448,114 +472,54 @@ function App() {
         </div>
       </section>
 
-      <section className="toolbar">
-        <div className="query-group" data-tour="query">
+      <section className="toolbar compact-toolbar" data-tour="query">
+        <div className="query-group">
           <select className="date-filter" value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilterId)} aria-label="Date filter" title="Choose a Gmail date search window">
             {dateFilters.map((filter) => <option key={filter.id} value={filter.id}>{filter.label}</option>)}
           </select>
           {showCustomDate && (
             <input className="date-input" type="date" value={customDate} onChange={(event) => setCustomDate(event.target.value)} aria-label="Custom date" title={`Gmail ${selectedDateFilter?.operator}: date`} />
           )}
-          <input className="query-input" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Extra Gmail search terms" placeholder="Extra terms, optional" title="Optional Gmail operators, such as category:promotions, from:name@example.com, is:unread, or has:attachment" />
-          <span className="query-preview" title="Generated Gmail query">{activeQuery}</span>
-          <input className="max-input" type="number" min={1} max={200} value={max} onChange={(event) => setMax(Number(event.target.value))} aria-label="Max emails" title="Number of emails to load into the visible page" />
-          <input className="scan-input" type="number" min={100} max={10000} value={scanLimit} onChange={(event) => setScanLimit(Number(event.target.value))} aria-label="Scan limit" title="Maximum emails for the background scan to classify and store" />
-          <button onClick={loadEmails} disabled={busy} title="Reload the visible page from Gmail or stored review state"><RefreshCcw size={16} />Refresh</button>
-          <span className="inline-toolset" data-tour="scan-monitor">
-            <button className={scan?.running ? "monitoring" : ""} onClick={toggleScan} disabled={busy} title="Start or stop a larger Gmail scan that stores classifications in SQLite"><Search size={16} />Scan</button>
-            <button className={monitor?.running ? "monitoring" : ""} onClick={toggleMonitor} disabled={busy} title="Start or stop polling for new Gmail messages"><Wifi size={16} />Monitor</button>
-            <label className="inline-toggle" title="Use OpenAI for scan and monitor jobs when enabled">
-              <input type="checkbox" checked={useAIForJobs} onChange={(event) => setUseAIForJobs(event.target.checked)} />
-              AI jobs
+          <input className="query-input" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Extra Gmail search terms" placeholder="Search terms, optional" title="Optional Gmail search terms such as from:name@example.com, is:unread, or has:attachment" />
+          <button onClick={loadEmails} disabled={busy} title="Load matching live Gmail metadata"><RefreshCcw size={16} />Refresh</button>
+          <button onClick={toggleScan} className={scan?.running ? "monitoring" : ""} disabled={busy} title="Find and save more matching emails"><Search size={16} />Find Emails</button>
+        </div>
+        <details className="advanced-menu" data-tour="scan-monitor">
+          <summary>Advanced</summary>
+          <div className="toolbar-secondary">
+            <span className="query-preview" title="Generated Gmail query">{activeQuery}</span>
+            <label>
+              <span>Visible results</span>
+              <input className="max-input" type="number" min={1} max={200} value={max} onChange={(event) => setMax(Number(event.target.value))} aria-label="Visible results" title="Visible results per page" />
             </label>
-          </span>
-          <button onClick={authorizeGmail} title="Open the Gmail OAuth authorization flow"><Shield size={16} />Authorize</button>
-        </div>
-        <div className="action-group">
-          <span className="inline-toolset" data-tour="categorize">
-            <button onClick={() => classify(false)} disabled={busy || emails.length === 0} title="Categorize the visible emails with local rules"><Archive size={16} />Categorize</button>
-            <button onClick={() => classify(true)} disabled={busy || emails.length === 0} title="Categorize the visible emails with OpenAI using bounded chunks"><Bot size={16} />AI Categorize</button>
-          </span>
-          <select value={targetCategory} onChange={(event) => setTargetCategory(event.target.value as Category)} aria-label="Target category" title="Category to use when moving selected emails">
-            {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
-          </select>
-          <label className="inline-toggle" title="Save a sender rule with the manual move">
-            <input type="checkbox" checked={applySenderRule} onChange={(event) => setApplySenderRule(event.target.checked)} />
-            Sender
-          </label>
-          <button data-tour="move" onClick={moveSelected} disabled={busy || selected.size === 0} title="Move selected emails into the chosen local category"><MoveRight size={16} />Move</button>
-          <span className="inline-toolset" data-tour="stored">
-            <select value={storedCategory} onChange={(event) => setStoredCategory(event.target.value as Category)} aria-label="Stored category" title="Stored category page to load from SQLite">
-              {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
-            </select>
-            <button onClick={() => loadStoredEmails()} disabled={busy} title="Load the selected category from SQLite review state"><Database size={16} />Stored</button>
-          </span>
-          <span className="inline-toolset" data-tour="cleanup">
-            <button onClick={() => bulk("mark_read")} disabled={busy} title="Mark selected Gmail messages as read"><MailCheck size={16} />Read</button>
-            <button onClick={() => bulk("unsubscribe")} disabled={busy} title="Preview unsubscribe options for selected messages"><Unlink size={16} />Unsubscribe</button>
-            <button className="danger" onClick={() => bulk("trash")} disabled={busy} title="Preview moving selected messages to Gmail trash"><Trash2 size={16} />Trash</button>
-          </span>
-        </div>
+            <label>
+              <span>Emails to check</span>
+              <input className="scan-input" type="number" min={100} max={10000} value={scanLimit} onChange={(event) => setScanLimit(Number(event.target.value))} aria-label="Emails to check" title="Emails to check during Find Emails" />
+            </label>
+            <button onClick={toggleMonitor} className={monitor?.running ? "monitoring" : ""} disabled={busy} title="Start or stop checking for new mail"><Wifi size={16} />Monitor</button>
+            <label className="inline-toggle" title="Use OpenAI for Find Emails and Monitor">
+              <input type="checkbox" checked={useAIForJobs} onChange={(event) => setUseAIForJobs(event.target.checked)} />
+              Use AI
+            </label>
+            <button onClick={authorizeGmail} title="Open Gmail authorization"><Shield size={16} />Authorize</button>
+          </div>
+        </details>
       </section>
 
       {notice && <div className="notice">{notice}</div>}
 
-      {monitor && (
-        <section className="monitor-panel">
-          <span>{monitor.running ? "Monitoring on" : "Monitoring off"}</span>
-          <span>{monitor.useAI ? "AI" : "Local"} classify</span>
-          <span>{monitor.cacheSize}/{monitor.cacheLimit} cached</span>
-          <span>{monitor.intervalSeconds}s interval</span>
-          {monitor.lastSuccessAt && <span>Last success {new Date(monitor.lastSuccessAt).toLocaleTimeString()}</span>}
-          {monitor.lastError && <span className="monitor-error">{monitor.lastError}</span>}
-        </section>
-      )}
-
-      {scan && (
-        <section className="monitor-panel">
-          <span>{scan.running ? "Scan running" : scan.completed ? "Scan complete" : "Scan idle"}</span>
-          <span>{scan.useAI ? "AI" : "Local"} classify</span>
-          <span>{scan.processed}/{scan.limit} processed</span>
-          <span>{scan.batchSize} batch</span>
-          <span>{scan.cacheSize}/{scan.cacheLimit} cached</span>
-          {scan.hasMore && <span>More available</span>}
-          {scan.lastError && <span className="monitor-error">{scan.lastError}</span>}
-        </section>
-      )}
-
-      {storedPage && source === "review_store" && (
-        <section className="monitor-panel">
-          <span>Stored {categoryLabel(storedCategory)}</span>
-          <span>{Math.min(storedPage.offset + storedPage.emails.length, storedPage.total)}/{storedPage.total} loaded</span>
-          <button onClick={() => loadStoredEmails(Math.max(0, storedPage.offset - storedPage.limit))} disabled={busy || storedPage.offset === 0} title="Load the previous stored page">Previous</button>
-          <button onClick={() => loadStoredEmails(storedPage.offset + storedPage.limit)} disabled={busy || storedPage.offset + storedPage.limit >= storedPage.total} title="Load the next stored page">Next</button>
-        </section>
-      )}
-
-      {reviewStats && (
-        <section className="coverage-panel" data-tour="coverage">
-          <div>
-            <span>Persisted review state</span>
-            <strong>{reviewStats.total}</strong>
-          </div>
-          <div>
-            <span>Needs review</span>
-            <strong>{reviewStats.needsReview}</strong>
-          </div>
-          <div>
-            <span>Manual moves</span>
-            <strong>{reviewStats.manual}</strong>
-          </div>
-          <div>
-            <span>Sender rules</span>
-            <strong>{reviewStats.senderRules}</strong>
-          </div>
-          <div>
-            <span>Reviewed</span>
-            <strong>{Math.max(0, reviewStats.total - reviewStats.needsReview)}</strong>
-          </div>
-        </section>
-      )}
+        <section className="progress-strip" data-tour="coverage">
+        {reviewStats && (
+          <>
+            <Metric label="Saved emails" value={reviewStats.total} />
+            <Metric label="Review needed" value={reviewStats.needsReview} />
+            <Metric label="Can unsubscribe" value={emails.filter((email) => email.hasUnsubscribe).length} />
+            <Metric label="Cleaned up" value={Math.max(0, reviewStats.total - reviewStats.needsReview)} />
+          </>
+        )}
+        {scan && <span>{scan.running ? "Finding emails" : scan.completed ? "Find complete" : "Find idle"} - {scan.processed}/{scan.limit}</span>}
+        {monitor && <span>{monitor.running ? "Monitoring on" : "Monitoring off"} - {monitor.useAI ? "AI" : "Local"}</span>}
+      </section>
 
       {actionResults.length > 0 && (
         <section className="action-results" data-tour="confirmation">
@@ -577,31 +541,88 @@ function App() {
         </section>
       )}
 
-      <section className="metrics">
-        <Metric label="Selected" value={selectedEmails.length} />
-        <Metric label="Unsubscribe" value={emails.filter((email) => email.hasUnsubscribe).length} />
-        <Metric label="Needs review" value={grouped.get("needs_review")?.length ?? 0} />
-        <Metric label="High confidence" value={emails.filter((email) => email.confidence >= 0.75).length} />
-      </section>
+      <section className="workspace">
+        <aside className="left-nav" aria-label="Cleanup sections">
+          <div className="nav-section-title"><Inbox size={16} />Cleanup</div>
+          {categories.map((category) => {
+            const visibleCount = grouped.get(category.id)?.length ?? 0;
+            const storedCount = reviewStats?.byCategory[category.id] ?? 0;
+            return (
+              <button
+                key={category.id}
+                className={activeCategory === category.id ? "nav-item active" : "nav-item"}
+                onClick={() => {
+                  setStoredCategory(category.id);
+                  void loadStoredEmails(0, category.id);
+                }}
+              >
+                <span>{category.label}</span>
+                <span>{source === "review_store" && activeCategory === category.id ? visibleEmails.length : visibleCount}/{storedCount}</span>
+              </button>
+            );
+          })}
+        </aside>
 
-      <section className="lanes">
-        {categories.map((category) => (
-          <Lane
-            key={category.id}
-            label={category.label}
-            emails={grouped.get(category.id) ?? []}
-            storedTotal={reviewStats?.byCategory[category.id] ?? 0}
-            tourTarget={category.id === "needs_review" ? "lane" : undefined}
+        <section className="mail-workbench" data-tour="lane">
+          <header className="workbench-header">
+            <div>
+              <h2>{categoryLabel(activeCategory)}</h2>
+              <p>{visibleEmails.length} visible - {reviewStats?.byCategory[activeCategory] ?? 0} saved - {sourceLabel(source)}</p>
+            </div>
+            <div className="workbench-actions" data-tour="categorize">
+              <button onClick={() => classify(false)} disabled={busy || emails.length === 0} title="Sort loaded emails with local rules"><Archive size={16} />Sort Emails</button>
+              <button onClick={() => classify(true)} disabled={busy || emails.length === 0} title="Use OpenAI to suggest categories"><Bot size={16} />Suggest Categories</button>
+              <button onClick={selectVisibleEmails} disabled={visibleEmails.length === 0} title="Select all visible emails"><Check size={16} />Select Visible</button>
+            </div>
+          </header>
+
+          {storedPage && source === "review_store" && (
+            <div className="page-controls">
+              <span>Saved Results {Math.min(storedPage.offset + storedPage.emails.length, storedPage.total)}/{storedPage.total}</span>
+              <button onClick={() => loadStoredEmails(Math.max(0, storedPage.offset - storedPage.limit))} disabled={busy || storedPage.offset === 0}>Previous</button>
+              <button onClick={() => loadStoredEmails(storedPage.offset + storedPage.limit)} disabled={busy || storedPage.offset + storedPage.limit >= storedPage.total}>Next</button>
+            </div>
+          )}
+
+          <EmailList
+            emails={visibleEmails}
             selected={selected}
             onToggle={toggle}
-            onSelectAll={() => selectLane(category.id)}
-            onLoadStored={() => {
-              setStoredCategory(category.id);
-              void loadStoredEmails(0, category.id);
-            }}
+            onOpen={(id) => setDetailEmailId(id)}
           />
-        ))}
+        </section>
       </section>
+
+      {selected.size > 0 && (
+        <section className="bulk-bar" data-tour="cleanup">
+          <strong>{selected.size} selected</strong>
+          <button onClick={clearSelected}>Clear</button>
+          <select value={targetCategory} onChange={(event) => setTargetCategory(event.target.value as Category)} aria-label="Move selected to category">
+            {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+          </select>
+          <label className="inline-toggle" title="Apply this category to future emails from the same sender">
+            <input type="checkbox" checked={applySenderRule} onChange={(event) => setApplySenderRule(event.target.checked)} />
+            Apply to future emails
+          </label>
+          <button data-tour="move" onClick={moveSelected} disabled={busy}><MoveRight size={16} />Move</button>
+          <button onClick={() => bulk("mark_read")} disabled={busy}><MailCheck size={16} />Mark Read</button>
+          <button onClick={() => bulk("unsubscribe")} disabled={busy}><Unlink size={16} />Unsubscribe</button>
+          <button className="danger" onClick={() => bulk("trash")} disabled={busy}><Trash2 size={16} />Move to Trash</button>
+        </section>
+      )}
+
+      {detailEmail && (
+        <EmailDetailModal
+          email={detailEmail}
+          selected={selected.has(detailEmail.id)}
+          onClose={() => setDetailEmailId(null)}
+          onToggle={() => toggle(detailEmail.id)}
+          onMarkRead={() => bulk("mark_read", [detailEmail.id])}
+          onUnsubscribe={() => bulk("unsubscribe", [detailEmail.id])}
+          onTrash={() => bulk("trash", [detailEmail.id])}
+        />
+      )}
+
       {activeTutorialStep && (
         <TutorialOverlay
           step={activeTutorialStep}
@@ -652,14 +673,14 @@ function sourceLabel(source: string) {
     return "Live Gmail metadata";
   }
   if (source === "review_store") {
-    return "Stored review state";
+    return "Saved Results";
   }
   return "Demo mailbox";
 }
 
 function actionLabel(action: "trash" | "mark_read" | "unsubscribe") {
   if (action === "trash") {
-    return "trash";
+    return "move to trash";
   }
   if (action === "unsubscribe") {
     return "unsubscribe";
@@ -698,31 +719,95 @@ function LoadingOverlay({ title, body }: { title: string; body: string }) {
   );
 }
 
-function Lane({ label, emails, storedTotal, tourTarget, selected, onToggle, onSelectAll, onLoadStored }: { label: string; emails: EmailSummary[]; storedTotal: number; tourTarget?: string; selected: Set<string>; onToggle: (id: string) => void; onSelectAll: () => void; onLoadStored: () => void }) {
+function EmailList({ emails, selected, onToggle, onOpen }: { emails: EmailSummary[]; selected: Set<string>; onToggle: (id: string) => void; onOpen: (id: string) => void }) {
+  if (emails.length === 0) {
+    return (
+      <div className="empty-state">
+        <Inbox size={28} />
+        <h2>No emails in this queue</h2>
+        <p>Try a wider date range, refresh live Gmail, or run Find Emails to add more saved results.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="lane" data-tour={tourTarget}>
-      <header>
-        <h2>{label}</h2>
-        <div className="lane-actions">
-          <button onClick={onSelectAll} disabled={emails.length === 0} title="Select visible emails">All</button>
-          <button onClick={onLoadStored} disabled={storedTotal === 0} title="Load stored emails">Load</button>
-          <span title={`${storedTotal} stored`}>{emails.length}/{storedTotal}</span>
-        </div>
-      </header>
-      <div className="cards">
-        {emails.map((email) => (
-          <button key={email.id} className={selected.has(email.id) ? "email-card selected" : "email-card"} onClick={() => onToggle(email.id)}>
+    <div className="email-list" role="list">
+      {emails.map((email) => (
+        <article key={email.id} className={selected.has(email.id) ? "email-row selected" : "email-row"} role="listitem">
+          <input
+            type="checkbox"
+            checked={selected.has(email.id)}
+            onChange={() => onToggle(email.id)}
+            aria-label={`Select ${email.subject || "email"}`}
+          />
+          <button className="email-row-main" onClick={() => onOpen(email.id)}>
             <span className="card-top">
               <strong>{email.subject || "(No subject)"}</strong>
               <span>{Math.round(email.confidence * 100)}%</span>
             </span>
             <span className="from">{email.from}</span>
             <span className="snippet">{email.snippet}</span>
-            <span className="reason">{email.reason}</span>
-            {email.hasUnsubscribe && <span className="tag">{email.canAutoUnsubscribe ? "one-click" : "unsubscribe"}</span>}
           </button>
-        ))}
-      </div>
+          <span className="row-category">{categoryLabel(email.category)}</span>
+          {email.hasUnsubscribe && <span className="tag">{email.canAutoUnsubscribe ? "Auto unsubscribe" : "Review unsubscribe"}</span>}
+          <button className="icon-button" onClick={() => onOpen(email.id)} title="Open email details" aria-label="Open email details"><Eye size={16} /></button>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function EmailDetailModal({ email, selected, onClose, onToggle, onMarkRead, onUnsubscribe, onTrash }: { email: EmailSummary; selected: boolean; onClose: () => void; onToggle: () => void; onMarkRead: () => void; onUnsubscribe: () => void; onTrash: () => void }) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="detail-backdrop" role="presentation" onMouseDown={onClose}>
+      <aside className="detail-modal" role="dialog" aria-modal="true" aria-label="Email details" onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <div>
+            <span className="detail-eyebrow">{categoryLabel(email.category)} - {Math.round(email.confidence * 100)}% confidence</span>
+            <h2>{email.subject || "(No subject)"}</h2>
+            <p>{email.from}</p>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close email details"><X size={18} /></button>
+        </header>
+
+        <section className="detail-section">
+          <h3>Summary</h3>
+          <p>{email.snippet || "No snippet available."}</p>
+        </section>
+
+        <section className="detail-section">
+          <h3>Why it is here</h3>
+          <p>{email.reason || "No classification reason was recorded."}</p>
+        </section>
+
+        <section className="detail-grid">
+          <div>
+            <span>Unsubscribe</span>
+            <strong>{email.hasUnsubscribe ? (email.canAutoUnsubscribe ? "Can unsubscribe automatically" : "Review link available") : "Not found"}</strong>
+          </div>
+          <div>
+            <span>Received</span>
+            <strong>{email.receivedAt ? new Date(email.receivedAt).toLocaleString() : "Unknown"}</strong>
+          </div>
+        </section>
+
+        <footer className="detail-actions">
+          <button onClick={onToggle}>{selected ? "Deselect" : "Select"}</button>
+          <button onClick={onMarkRead}><MailCheck size={16} />Mark Read</button>
+          <button onClick={onUnsubscribe} disabled={!email.hasUnsubscribe}><Unlink size={16} />Unsubscribe</button>
+          <button className="danger" onClick={onTrash}><Trash2 size={16} />Move to Trash</button>
+        </footer>
+      </aside>
     </div>
   );
 }

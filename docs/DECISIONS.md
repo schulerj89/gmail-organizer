@@ -67,3 +67,11 @@ The dashboard controls a backend polling service instead of only refreshing in t
 ## Paged Scanning
 
 Large inbox cleanup uses a scan job that pages through Gmail metadata in batches of up to 200 messages. Each batch is classified and persisted before the next page is fetched, while the UI receives only a bounded recent cache. This keeps memory bounded even when the requested scan limit is much larger than the visible dashboard cache.
+
+## Cleanup Workbench UI
+
+The dashboard is moving from a lane board to a contained cleanup workbench. The primary desktop layout uses a left navigation rail, a single active email queue, contextual bulk actions, and an email detail dialog instead of rendering every category as a long lane.
+
+This first pass keeps the backend API stable and uses local CSS plus `lucide-react` rather than adding Material UI immediately. The intended Material-like behavior is contained scrolling, visible navigation, contextual actions, and progressive disclosure for advanced controls.
+
+Implementation labels should favor user language over storage or API language: "Saved emails" instead of "Persisted review state", "Find Emails" instead of "Scan", "Visible results" instead of "Max", "Use AI" instead of "AI jobs", and "Move to Trash" instead of "Trash".

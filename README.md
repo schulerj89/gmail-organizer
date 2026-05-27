@@ -5,7 +5,7 @@ Local-first Gmail organizer for reviewing, categorizing, deleting, and preparing
 ## Architecture
 
 - Go backend for low memory overhead, secure local API boundaries, Gmail OAuth integration, and batched metadata-only email reads.
-- React + Vite dashboard for category lanes, inbox review, AI categorization, and bulk actions.
+- React + Vite cleanup workbench for category queues, email detail review, AI categorization, and bulk actions.
 - Secrets stay outside the repo. The app references `GOOGLE_CLIENT_SECRET_FILE` and `OPENAI_API_KEY_FILE` paths and never returns secret values from the API.
 
 ## Current Status
@@ -16,8 +16,10 @@ This is the initial working slice. It includes:
 - Gmail metadata fetch using `gmail.modify` scope.
 - Heuristic categorization and optional OpenAI Responses API categorization.
 - First-run guided dashboard tutorial with local browser storage for completed/skipped state and a restart control.
-- Dashboard lanes by category.
-- Per-lane stored totals and load controls for reviewing SQLite-backed category pages.
+- Left-nav cleanup workbench with one contained email queue instead of long category lanes.
+- Email detail dialog with sender, subject, snippet, category reason, unsubscribe availability, and single-message actions.
+- Contextual bulk action bar that appears only after selecting emails.
+- Saved category totals and left-nav category loading for SQLite-backed review pages.
 - User-friendly Gmail date search presets plus custom before/after calendar date controls.
 - Explicit AI toggle for scan/monitor jobs with bounded backend AI classification chunks.
 - Manual category correction for selected emails.
