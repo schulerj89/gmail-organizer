@@ -6,6 +6,7 @@ import (
 	"net/mail"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -21,11 +22,21 @@ type ReviewStore struct {
 }
 
 type StoredClassification struct {
-	EmailID    string          `json:"emailId"`
-	Category   domain.Category `json:"category"`
-	Confidence float64         `json:"confidence"`
-	Reason     string          `json:"reason"`
-	UpdatedAt  time.Time       `json:"updatedAt"`
+	EmailID            string          `json:"emailId"`
+	ThreadID           string          `json:"threadId,omitempty"`
+	From               string          `json:"from,omitempty"`
+	Subject            string          `json:"subject,omitempty"`
+	Snippet            string          `json:"snippet,omitempty"`
+	ReceivedAt         time.Time       `json:"receivedAt,omitempty"`
+	LabelIDs           []string        `json:"labelIds,omitempty"`
+	Category           domain.Category `json:"category"`
+	Confidence         float64         `json:"confidence"`
+	Reason             string          `json:"reason"`
+	HasUnsubscribe     bool            `json:"hasUnsubscribe,omitempty"`
+	UnsubscribeTarget  string          `json:"unsubscribeTarget,omitempty"`
+	UnsubscribeMethod  string          `json:"unsubscribeMethod,omitempty"`
+	CanAutoUnsubscribe bool            `json:"canAutoUnsubscribe,omitempty"`
+	UpdatedAt          time.Time       `json:"updatedAt"`
 }
 
 type AuditEntry struct {
@@ -42,6 +53,13 @@ type ReviewStats struct {
 	SenderRules int                     `json:"senderRules"`
 	ByCategory  map[domain.Category]int `json:"byCategory"`
 	UpdatedAt   *time.Time              `json:"updatedAt,omitempty"`
+}
+
+type StoredEmailPage struct {
+	Emails []domain.EmailSummary `json:"emails"`
+	Total  int                   `json:"total"`
+	Limit  int                   `json:"limit"`
+	Offset int                   `json:"offset"`
 }
 
 type SenderRule struct {
@@ -109,11 +127,21 @@ func (s *ReviewStore) SaveClassifications(emails []domain.EmailSummary) error {
 			continue
 		}
 		state[email.ID] = StoredClassification{
-			EmailID:    email.ID,
-			Category:   email.Category,
-			Confidence: email.Confidence,
-			Reason:     email.Reason,
-			UpdatedAt:  now,
+			EmailID:            email.ID,
+			ThreadID:           email.ThreadID,
+			From:               email.From,
+			Subject:            email.Subject,
+			Snippet:            email.Snippet,
+			ReceivedAt:         email.ReceivedAt,
+			LabelIDs:           append([]string(nil), email.LabelIDs...),
+			Category:           email.Category,
+			Confidence:         email.Confidence,
+			Reason:             email.Reason,
+			HasUnsubscribe:     email.HasUnsubscribe,
+			UnsubscribeTarget:  email.UnsubscribeTarget,
+			UnsubscribeMethod:  email.UnsubscribeMethod,
+			CanAutoUnsubscribe: email.CanAutoUnsubscribe,
+			UpdatedAt:          now,
 		}
 	}
 	raw, err := json.MarshalIndent(state, "", "  ")
@@ -121,6 +149,58 @@ func (s *ReviewStore) SaveClassifications(emails []domain.EmailSummary) error {
 		return err
 	}
 	return os.WriteFile(s.statePath, raw, 0o600)
+}
+
+func (s *ReviewStore) ListEmails(category domain.Category, limit int, offset int) (StoredEmailPage, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	state, err := s.loadState()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return StoredEmailPage{Emails: []domain.EmailSummary{}, Limit: limit, Offset: offset}, nil
+		}
+		return StoredEmailPage{}, err
+	}
+	all := make([]StoredClassification, 0, len(state))
+	for _, item := range state {
+		if category != "" && item.Category != category {
+			continue
+		}
+		if item.EmailID == "" {
+			continue
+		}
+		all = append(all, item)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		left := all[i].ReceivedAt
+		right := all[j].ReceivedAt
+		if left.Equal(right) {
+			return all[i].UpdatedAt.After(all[j].UpdatedAt)
+		}
+		return left.After(right)
+	})
+	total := len(all)
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	emails := make([]domain.EmailSummary, 0, end-offset)
+	for _, item := range all[offset:end] {
+		emails = append(emails, item.toEmailSummary())
+	}
+	return StoredEmailPage{
+		Emails: emails,
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	}, nil
 }
 
 func (s *ReviewStore) SaveSenderRules(emails []domain.EmailSummary, category domain.Category) error {
@@ -281,4 +361,23 @@ func normalizeSender(value string) string {
 	}
 	value = strings.Trim(value, "<>")
 	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func (s StoredClassification) toEmailSummary() domain.EmailSummary {
+	return domain.EmailSummary{
+		ID:                 s.EmailID,
+		ThreadID:           s.ThreadID,
+		From:               s.From,
+		Subject:            s.Subject,
+		Snippet:            s.Snippet,
+		ReceivedAt:         s.ReceivedAt,
+		LabelIDs:           append([]string(nil), s.LabelIDs...),
+		Category:           s.Category,
+		Confidence:         s.Confidence,
+		Reason:             s.Reason,
+		HasUnsubscribe:     s.HasUnsubscribe,
+		UnsubscribeTarget:  s.UnsubscribeTarget,
+		UnsubscribeMethod:  s.UnsubscribeMethod,
+		CanAutoUnsubscribe: s.CanAutoUnsubscribe,
+	}
 }

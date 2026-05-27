@@ -1,4 +1,4 @@
-import type { ActionResult, AppConfig, EmailSummary, MonitorStatus, ReviewStats, ScanStatus } from "./types";
+import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -49,6 +49,12 @@ export async function getGoogleAuthURL() {
 
 export async function fetchReviewStats() {
   return request<ReviewStats>("/api/review");
+}
+
+export async function fetchReviewEmails(category: Category, limit: number, offset: number) {
+  return request<ReviewEmailPage>(
+    `/api/review/emails?category=${encodeURIComponent(category)}&limit=${limit}&offset=${offset}`
+  );
 }
 
 export async function fetchMonitorStatus() {

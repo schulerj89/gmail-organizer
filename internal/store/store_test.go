@@ -2,6 +2,7 @@ package store
 
 import (
 	"testing"
+	"time"
 
 	"github.com/schulerj89/gmail-organizer/internal/domain"
 )
@@ -68,6 +69,76 @@ func TestReviewStoreStats(t *testing.T) {
 	}
 	if stats.UpdatedAt == nil {
 		t.Fatal("expected updated timestamp")
+	}
+}
+
+func TestReviewStoreListsStoredEmailsByCategory(t *testing.T) {
+	store, err := NewReviewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	now := time.Now().UTC()
+	emails := []domain.EmailSummary{
+		{
+			ID:                 "email-1",
+			ThreadID:           "thread-1",
+			From:               "Deals <deals@example.com>",
+			Subject:            "Sale",
+			Snippet:            "Save now.",
+			ReceivedAt:         now.Add(-time.Hour),
+			Category:           domain.CategoryUnwanted,
+			Confidence:         0.9,
+			Reason:             "test",
+			HasUnsubscribe:     true,
+			UnsubscribeTarget:  "mailto:u@example.com",
+			UnsubscribeMethod:  "mailto",
+			CanAutoUnsubscribe: false,
+		},
+		{
+			ID:         "email-2",
+			Subject:    "Receipt",
+			ReceivedAt: now,
+			Category:   domain.CategoryReceipts,
+			Confidence: 0.8,
+			Reason:     "test",
+		},
+	}
+	if err := store.SaveClassifications(emails); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	page, err := store.ListEmails(domain.CategoryUnwanted, 10, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if page.Total != 1 || len(page.Emails) != 1 {
+		t.Fatalf("unexpected page: %#v", page)
+	}
+	got := page.Emails[0]
+	if got.ID != "email-1" || got.Subject != "Sale" || !got.HasUnsubscribe || got.UnsubscribeTarget == "" {
+		t.Fatalf("stored metadata was not preserved: %#v", got)
+	}
+}
+
+func TestReviewStoreListEmailsPaginates(t *testing.T) {
+	store, err := NewReviewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	now := time.Now().UTC()
+	emails := []domain.EmailSummary{
+		{ID: "email-1", ReceivedAt: now.Add(-2 * time.Hour), Category: domain.CategoryUnwanted},
+		{ID: "email-2", ReceivedAt: now.Add(-1 * time.Hour), Category: domain.CategoryUnwanted},
+		{ID: "email-3", ReceivedAt: now, Category: domain.CategoryUnwanted},
+	}
+	if err := store.SaveClassifications(emails); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	page, err := store.ListEmails(domain.CategoryUnwanted, 1, 1)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if page.Total != 3 || len(page.Emails) != 1 || page.Emails[0].ID != "email-2" {
+		t.Fatalf("unexpected page: %#v", page)
 	}
 }
 

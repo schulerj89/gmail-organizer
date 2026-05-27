@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Archive, Bot, Check, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
-import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchReviewStats, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
-import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewStats, ScanStatus } from "./types";
+import { Archive, Bot, Check, Database, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
+import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchReviewEmails, fetchReviewStats, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
+import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
 import "./styles.css";
 
 const categories: { id: Category; label: string }[] = [
@@ -31,6 +31,7 @@ function App() {
   const [max, setMax] = useState(50);
   const [scanLimit, setScanLimit] = useState(1000);
   const [targetCategory, setTargetCategory] = useState<Category>("needs_review");
+  const [storedCategory, setStoredCategory] = useState<Category>("unwanted");
   const [applySenderRule, setApplySenderRule] = useState(true);
   const [useAIForJobs, setUseAIForJobs] = useState(false);
   const [source, setSource] = useState("demo");
@@ -39,6 +40,7 @@ function App() {
   const [monitor, setMonitor] = useState<MonitorStatus | null>(null);
   const [scan, setScan] = useState<ScanStatus | null>(null);
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null);
+  const [storedPage, setStoredPage] = useState<ReviewEmailPage | null>(null);
   const [actionResults, setActionResults] = useState<ActionResult[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
@@ -82,9 +84,27 @@ function App() {
       setSource(result.source);
       setSelected(new Set());
       setPendingAction(null);
+      setStoredPage(null);
       setNotice(result.source === "demo" ? "Showing demo data until Gmail is authorized." : "Loaded Gmail metadata.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Failed to load emails.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadStoredEmails(offset = 0) {
+    setBusy(true);
+    try {
+      const result = await fetchReviewEmails(storedCategory, max, offset);
+      setEmails(result.emails);
+      setSource(result.source);
+      setStoredPage(result);
+      setSelected(new Set());
+      setPendingAction(null);
+      setNotice(`Loaded ${result.emails.length} of ${result.total} stored ${categoryLabel(storedCategory)} email(s).`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Failed to load stored review emails.");
     } finally {
       setBusy(false);
     }
@@ -277,7 +297,7 @@ function App() {
       <section className="topbar">
         <div>
           <h1>Gmail Organizer</h1>
-          <p>{source === "gmail" ? "Live Gmail metadata" : "Demo mailbox"} - {emails.length} emails - {selected.size} selected</p>
+          <p>{sourceLabel(source)} - {emails.length} emails - {selected.size} selected</p>
         </div>
         <div className="status-row">
           <Status label="Gmail" active={Boolean(config?.gmailAuthenticated)} />
@@ -311,6 +331,10 @@ function App() {
             Sender
           </label>
           <button onClick={moveSelected} disabled={busy || selected.size === 0}><MoveRight size={16} />Move</button>
+          <select value={storedCategory} onChange={(event) => setStoredCategory(event.target.value as Category)} aria-label="Stored category">
+            {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+          </select>
+          <button onClick={() => loadStoredEmails()} disabled={busy}><Database size={16} />Stored</button>
           <button onClick={() => bulk("mark_read")} disabled={busy}><MailCheck size={16} />Read</button>
           <button onClick={() => bulk("unsubscribe")} disabled={busy}><Unlink size={16} />Unsubscribe</button>
           <button className="danger" onClick={() => bulk("trash")} disabled={busy}><Trash2 size={16} />Trash</button>
@@ -339,6 +363,15 @@ function App() {
           <span>{scan.cacheSize}/{scan.cacheLimit} cached</span>
           {scan.hasMore && <span>More available</span>}
           {scan.lastError && <span className="monitor-error">{scan.lastError}</span>}
+        </section>
+      )}
+
+      {storedPage && source === "review_store" && (
+        <section className="monitor-panel">
+          <span>Stored {categoryLabel(storedCategory)}</span>
+          <span>{Math.min(storedPage.offset + storedPage.emails.length, storedPage.total)}/{storedPage.total} loaded</span>
+          <button onClick={() => loadStoredEmails(Math.max(0, storedPage.offset - storedPage.limit))} disabled={busy || storedPage.offset === 0}>Previous</button>
+          <button onClick={() => loadStoredEmails(storedPage.offset + storedPage.limit)} disabled={busy || storedPage.offset + storedPage.limit >= storedPage.total}>Next</button>
         </section>
       )}
 
@@ -425,6 +458,16 @@ function Metric({ label, value }: { label: string; value: number }) {
 
 function categoryLabel(category: Category) {
   return categories.find((item) => item.id === category)?.label ?? category;
+}
+
+function sourceLabel(source: string) {
+  if (source === "gmail") {
+    return "Live Gmail metadata";
+  }
+  if (source === "review_store") {
+    return "Stored review state";
+  }
+  return "Demo mailbox";
 }
 
 function actionLabel(action: "trash" | "mark_read" | "unsubscribe") {

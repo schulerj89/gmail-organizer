@@ -78,6 +78,14 @@ export type ReviewStats = {
   updatedAt?: string;
 };
 
+export type ReviewEmailPage = {
+  source: string;
+  emails: EmailSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
 export type ActionResult = {
   emailId: string;
   status: string;

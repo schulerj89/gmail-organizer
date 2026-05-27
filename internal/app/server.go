@@ -72,6 +72,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/actions", s.handleAction)
 	mux.HandleFunc("GET /api/audit", s.handleAudit)
 	mux.HandleFunc("GET /api/review", s.handleReviewStats)
+	mux.HandleFunc("GET /api/review/emails", s.handleReviewEmails)
 	mux.HandleFunc("GET /api/monitor", s.handleMonitorStatus)
 	mux.HandleFunc("POST /api/monitor/start", s.handleMonitorStart)
 	mux.HandleFunc("POST /api/monitor/stop", s.handleMonitorStop)
@@ -259,6 +260,29 @@ func (s *Server) handleReviewStats(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *Server) handleReviewEmails(w http.ResponseWriter, r *http.Request) {
+	category := domain.Category(strings.TrimSpace(r.URL.Query().Get("category")))
+	if category != "" && !domain.ValidCategory(category) {
+		writeError(w, http.StatusBadRequest, "unsupported category")
+		return
+	}
+	limit := int(int64FromQuery(r, "limit", 100))
+	offset := int(int64FromQuery(r, "offset", 0))
+	page, err := s.store.ListEmails(category, limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.remember(page.Emails)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"source": "review_store",
+		"emails": page.Emails,
+		"total":  page.Total,
+		"limit":  page.Limit,
+		"offset": page.Offset,
+	})
 }
 
 func (s *Server) handleMonitorStatus(w http.ResponseWriter, _ *http.Request) {

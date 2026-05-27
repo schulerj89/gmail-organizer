@@ -32,6 +32,8 @@ Manual category moves can save a sender rule. Sender rules are local-only, apply
 
 Review coverage is calculated from the local classification state, not from Gmail message bodies. This gives the dashboard a stable count of persisted categorization progress across paged scans, manual moves, and future monitoring runs while keeping memory and data exposure bounded.
 
+The review store also keeps minimal message metadata with each classification so category pages from prior scans can be loaded later for cleanup. The dashboard loads those stored category pages on demand instead of keeping the entire scanned mailbox in the browser or backend cache.
+
 ## Unsubscribe
 
 The app extracts `https://` and `mailto:` List-Unsubscribe targets. It executes only HTTPS one-click unsubscribe requests when Gmail provides `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; ordinary HTTPS and `mailto:` targets are prepared as review links. One-click execution rejects local/private literal IP targets and does not follow redirects.
