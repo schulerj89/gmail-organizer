@@ -18,6 +18,10 @@ API keys and OAuth client secrets are referenced by file path. They are not copi
 
 Bulk delete initially maps to Gmail trash. Permanent deletion is intentionally deferred until the review workflow and audit logging are stronger.
 
+## Manual Review
+
+Manual category moves persist through the same local review state as classifier output. A manual move uses confidence `1.0` and a clear reason so user corrections override later low-confidence classifier output when the email is loaded again.
+
 ## Unsubscribe
 
 The app extracts `https://` and `mailto:` List-Unsubscribe targets. It executes only HTTPS one-click unsubscribe requests when Gmail provides `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; ordinary HTTPS and `mailto:` targets are prepared as review links. One-click execution rejects local/private literal IP targets and does not follow redirects.

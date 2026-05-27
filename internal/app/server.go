@@ -68,6 +68,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/auth/google/callback", s.handleGoogleCallback)
 	mux.HandleFunc("GET /api/emails", s.handleEmails)
 	mux.HandleFunc("POST /api/classify", s.handleClassify)
+	mux.HandleFunc("POST /api/categories", s.handleCategoryUpdate)
 	mux.HandleFunc("POST /api/actions", s.handleAction)
 	mux.HandleFunc("GET /api/audit", s.handleAudit)
 	mux.HandleFunc("GET /api/monitor", s.handleMonitorStatus)
@@ -138,6 +139,35 @@ func (s *Server) handleClassify(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.SaveClassifications(classified)
 	s.remember(classified)
 	writeJSON(w, http.StatusOK, map[string]any{"emails": classified})
+}
+
+func (s *Server) handleCategoryUpdate(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		IDs      []string        `json:"ids"`
+		Category domain.Category `json:"category"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(payload.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "no email ids were provided")
+		return
+	}
+	if !domain.ValidCategory(payload.Category) {
+		writeError(w, http.StatusBadRequest, "unsupported category")
+		return
+	}
+	emails := s.updateCategories(payload.IDs, payload.Category)
+	if len(emails) == 0 {
+		writeError(w, http.StatusNotFound, "none of the selected emails are currently loaded")
+		return
+	}
+	if err := s.store.SaveClassifications(emails); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"emails": s.snapshot()})
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
@@ -285,6 +315,26 @@ func (s *Server) snapshot() []domain.EmailSummary {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return append([]domain.EmailSummary(nil), s.lastEmails...)
+}
+
+func (s *Server) updateCategories(ids []string, category domain.Category) []domain.EmailSummary {
+	selected := map[string]struct{}{}
+	for _, id := range ids {
+		selected[id] = struct{}{}
+	}
+	updated := []domain.EmailSummary{}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.lastEmails {
+		if _, ok := selected[s.lastEmails[i].ID]; !ok {
+			continue
+		}
+		s.lastEmails[i].Category = category
+		s.lastEmails[i].Confidence = 1
+		s.lastEmails[i].Reason = "Manually categorized."
+		updated = append(updated, s.lastEmails[i])
+	}
+	return updated
 }
 
 func (s *Server) staticHandler() http.Handler {

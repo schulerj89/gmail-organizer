@@ -29,6 +29,13 @@ export async function classifyEmails(emails: EmailSummary[], useAI: boolean) {
   });
 }
 
+export async function updateCategories(ids: string[], category: string) {
+  return request<{ emails: EmailSummary[] }>("/api/categories", {
+    method: "POST",
+    body: JSON.stringify({ ids, category })
+  });
+}
+
 export async function runAction(action: "trash" | "mark_read" | "unsubscribe", ids: string[]) {
   return request<{ results: ActionResult[] }>("/api/actions", {
     method: "POST",

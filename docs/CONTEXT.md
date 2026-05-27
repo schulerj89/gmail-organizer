@@ -8,7 +8,7 @@ Build a secure, memory-efficient Gmail AI organizer that categorizes emails, mon
 
 - Backend: Go local HTTP API in `cmd/server` and `internal`.
 - Frontend: React/Vite app in `web`.
-- Dashboard: category lanes, query/max controls, manual refresh, monitoring toggle, AI categorize, bulk read, unsubscribe preparation, and trash.
+- Dashboard: category lanes, query/max controls, manual refresh, scan, monitoring toggle, AI categorize, manual category moves, bulk read, unsubscribe preparation, and trash.
 - Persisted review state and JSONL action audit live under ignored `data/`.
 - Backend monitor service polls on a bounded interval, keeps a bounded cache, classifies results, and exposes `/api/monitor`.
 - Unsubscribe action executes only one-click HTTPS unsubscribe headers; other targets are surfaced as review links in the dashboard.

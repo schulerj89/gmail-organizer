@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Archive, Bot, Check, MailCheck, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
-import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan } from "./api";
+import { Archive, Bot, Check, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
+import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
 import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ScanStatus } from "./types";
 import "./styles.css";
 
@@ -25,6 +25,7 @@ function App() {
   const [query, setQuery] = useState("newer_than:365d");
   const [max, setMax] = useState(50);
   const [scanLimit, setScanLimit] = useState(1000);
+  const [targetCategory, setTargetCategory] = useState<Category>("needs_review");
   const [source, setSource] = useState("demo");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -179,10 +180,38 @@ function App() {
     }
   }
 
+  async function moveSelected() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) {
+      setNotice("Select at least one email first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await updateCategories(ids, targetCategory);
+      setEmails(result.emails);
+      setSelected(new Set());
+      setNotice(`${ids.length} email(s) moved to ${categoryLabel(targetCategory)}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Category update failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function toggle(id: string) {
     setSelected((current) => {
       const next = new Set(current);
       next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function selectLane(category: Category) {
+    const laneIds = emails.filter((email) => email.category === category).map((email) => email.id);
+    setSelected((current) => {
+      const next = new Set(current);
+      laneIds.forEach((id) => next.add(id));
       return next;
     });
   }
@@ -214,6 +243,10 @@ function App() {
         <div className="action-group">
           <button onClick={() => classify(false)} disabled={busy || emails.length === 0}><Archive size={16} />Categorize</button>
           <button onClick={() => classify(true)} disabled={busy || emails.length === 0}><Bot size={16} />AI Categorize</button>
+          <select value={targetCategory} onChange={(event) => setTargetCategory(event.target.value as Category)} aria-label="Target category">
+            {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+          </select>
+          <button onClick={moveSelected} disabled={busy || selected.size === 0}><MoveRight size={16} />Move</button>
           <button onClick={() => bulk("mark_read")} disabled={busy}><MailCheck size={16} />Read</button>
           <button onClick={() => bulk("unsubscribe")} disabled={busy}><Unlink size={16} />Unsubscribe</button>
           <button className="danger" onClick={() => bulk("trash")} disabled={busy}><Trash2 size={16} />Trash</button>
@@ -270,6 +303,7 @@ function App() {
             emails={grouped.get(category.id) ?? []}
             selected={selected}
             onToggle={toggle}
+            onSelectAll={() => selectLane(category.id)}
           />
         ))}
       </section>
@@ -290,12 +324,19 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function Lane({ label, emails, selected, onToggle }: { label: string; emails: EmailSummary[]; selected: Set<string>; onToggle: (id: string) => void }) {
+function categoryLabel(category: Category) {
+  return categories.find((item) => item.id === category)?.label ?? category;
+}
+
+function Lane({ label, emails, selected, onToggle, onSelectAll }: { label: string; emails: EmailSummary[]; selected: Set<string>; onToggle: (id: string) => void; onSelectAll: () => void }) {
   return (
     <div className="lane">
       <header>
         <h2>{label}</h2>
-        <span>{emails.length}</span>
+        <div className="lane-actions">
+          <button onClick={onSelectAll} disabled={emails.length === 0}>All</button>
+          <span>{emails.length}</span>
+        </div>
       </header>
       <div className="cards">
         {emails.map((email) => (

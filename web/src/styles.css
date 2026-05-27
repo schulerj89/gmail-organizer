@@ -13,7 +13,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -80,7 +81,8 @@ h1 {
   margin-bottom: 12px;
 }
 
-input {
+input,
+select {
   background: #ffffff;
   border: 1px solid #cfd8d5;
   border-radius: 6px;
@@ -249,6 +251,18 @@ button:disabled {
 
 .lane h2 {
   font-size: 15px;
+}
+
+.lane-actions {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.lane-actions button {
+  font-size: 12px;
+  height: 28px;
+  padding: 0 8px;
 }
 
 .lane header span {

@@ -18,6 +18,25 @@ const (
 	CategoryUnwanted    Category = "unwanted"
 )
 
+func ValidCategory(category Category) bool {
+	switch category {
+	case CategoryNeedsReview,
+		CategoryPromotions,
+		CategoryNewsletters,
+		CategorySocial,
+		CategoryFinance,
+		CategoryTravel,
+		CategoryWork,
+		CategoryReceipts,
+		CategorySecurity,
+		CategoryPersonal,
+		CategoryUnwanted:
+		return true
+	default:
+		return false
+	}
+}
+
 type EmailSummary struct {
 	ID                 string    `json:"id"`
 	ThreadID           string    `json:"threadId"`

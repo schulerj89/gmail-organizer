@@ -16,6 +16,7 @@ This is the initial working slice. It includes:
 - Gmail metadata fetch using `gmail.modify` scope.
 - Heuristic categorization and optional OpenAI Responses API categorization.
 - Dashboard lanes by category.
+- Manual category correction for selected emails.
 - Bulk trash, mark-read, and unsubscribe-preparation actions.
 - One-click unsubscribe execution for Gmail messages that advertise `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
 - Paged mailbox scanning for larger cleanup passes without loading the full mailbox into memory.
