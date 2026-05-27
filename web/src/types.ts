@@ -92,3 +92,10 @@ export type ActionResult = {
   message?: string;
   safeLink?: string;
 };
+
+export type ActionResponse = {
+  results: ActionResult[];
+  requiresConfirmation: boolean;
+  confirmationToken?: string;
+  confirmationExpiresAt?: string;
+};

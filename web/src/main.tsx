@@ -21,6 +21,8 @@ const categories: { id: Category; label: string }[] = [
 type PendingAction = {
   action: "trash" | "unsubscribe";
   ids: string[];
+  confirmationToken: string;
+  confirmationExpiresAt?: string;
 };
 
 function App() {
@@ -206,10 +208,13 @@ function App() {
     setPendingAction(null);
     setBusy(true);
     try {
-      const result = await runAction(action, ids, action === "mark_read");
+      const result = await runAction(action, ids);
       setActionResults(result.results);
       if (result.requiresConfirmation && (action === "trash" || action === "unsubscribe")) {
-        setPendingAction({ action, ids });
+        if (!result.confirmationToken) {
+          throw new Error("Server did not return a confirmation token.");
+        }
+        setPendingAction({ action, ids, confirmationToken: result.confirmationToken, confirmationExpiresAt: result.confirmationExpiresAt });
         setNotice(`${result.results.length} action preview(s). Confirm to execute ${actionLabel(action)}.`);
       } else {
         finishAction(action, result.results);
@@ -227,7 +232,7 @@ function App() {
     }
     setBusy(true);
     try {
-      const result = await runAction(pendingAction.action, pendingAction.ids, true);
+      const result = await runAction(pendingAction.action, pendingAction.ids, pendingAction.confirmationToken);
       setActionResults(result.results);
       finishAction(pendingAction.action, result.results);
       setPendingAction(null);
@@ -405,7 +410,7 @@ function App() {
           {pendingAction && (
             <div className="confirm-row">
               <strong>{actionLabel(pendingAction.action)} pending</strong>
-              <span>{pendingAction.ids.length} email(s)</span>
+              <span>{pendingAction.ids.length} email(s){pendingAction.confirmationExpiresAt ? ` until ${new Date(pendingAction.confirmationExpiresAt).toLocaleTimeString()}` : ""}</span>
               <button className="danger" onClick={confirmPendingAction} disabled={busy}>Confirm</button>
               <button onClick={cancelPendingAction} disabled={busy}>Cancel</button>
             </div>

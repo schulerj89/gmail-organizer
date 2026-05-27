@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/schulerj89/gmail-organizer/internal/domain"
 )
@@ -76,6 +77,41 @@ func TestNormalizeIDsDeduplicatesAndSkipsBlanks(t *testing.T) {
 	got := normalizeIDs([]string{" a ", "", "a", "b"})
 	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Fatalf("unexpected ids: %#v", got)
+	}
+}
+
+func TestConfirmationTokenMatchesActionAndIDsOnce(t *testing.T) {
+	server := &Server{}
+	token, expiresAt := server.createConfirmation(domain.ActionTrash, []string{"a", "b"})
+	if token == "" || expiresAt.IsZero() {
+		t.Fatalf("expected token and expiry, got token=%q expiry=%v", token, expiresAt)
+	}
+	if server.consumeConfirmation(token, domain.ActionUnsubscribe, []string{"a", "b"}) {
+		t.Fatal("token should not match a different action")
+	}
+	token, _ = server.createConfirmation(domain.ActionTrash, []string{"a", "b"})
+	if server.consumeConfirmation(token, domain.ActionTrash, []string{"b", "a"}) {
+		t.Fatal("token should not match reordered ids")
+	}
+	token, _ = server.createConfirmation(domain.ActionTrash, []string{"a", "b"})
+	if !server.consumeConfirmation(token, domain.ActionTrash, []string{"a", "b"}) {
+		t.Fatal("expected matching token to be consumed")
+	}
+	if server.consumeConfirmation(token, domain.ActionTrash, []string{"a", "b"}) {
+		t.Fatal("token should be single-use")
+	}
+}
+
+func TestConfirmationTokenExpires(t *testing.T) {
+	server := &Server{confirmations: map[string]pendingConfirmation{
+		"expired": {
+			Action:    domain.ActionTrash,
+			IDs:       []string{"a"},
+			ExpiresAt: time.Now().UTC().Add(-time.Minute),
+		},
+	}}
+	if server.consumeConfirmation("expired", domain.ActionTrash, []string{"a"}) {
+		t.Fatal("expired token should not be accepted")
 	}
 }
 

@@ -16,7 +16,7 @@ Build a secure, memory-efficient Gmail AI organizer that categorizes emails, mon
 - Unsubscribe action executes only one-click HTTPS unsubscribe headers; other targets are surfaced as review links in the dashboard.
 - Backend scan service pages through Gmail metadata, classifies and persists each batch, and exposes `/api/scan`.
 - Scan and monitor can opt into AI classification; backend AI calls are chunked with heuristic fallback.
-- Trash and one-click unsubscribe actions now preview first and require explicit confirmation before execution.
+- Trash and one-click unsubscribe actions now preview first and require a short-lived server confirmation token before execution.
 - Stored category pages can be loaded from persisted review state for later bulk cleanup beyond the bounded scan cache.
 - Mark-read uses Gmail batch modify requests to reduce API calls during large cleanup selections.
 - Action audit reads support bounded large JSONL entries for 1000-message cleanup results.

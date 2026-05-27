@@ -1,4 +1,4 @@
-import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
+import type { ActionResponse, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -36,10 +36,10 @@ export async function updateCategories(ids: string[], category: string, applySen
   });
 }
 
-export async function runAction(action: "trash" | "mark_read" | "unsubscribe", ids: string[], confirm = false) {
-  return request<{ results: ActionResult[]; requiresConfirmation: boolean }>("/api/actions", {
+export async function runAction(action: "trash" | "mark_read" | "unsubscribe", ids: string[], confirmationToken = "") {
+  return request<ActionResponse>("/api/actions", {
     method: "POST",
-    body: JSON.stringify({ action, ids, confirm })
+    body: JSON.stringify({ action, ids, confirmationToken })
   });
 }
 

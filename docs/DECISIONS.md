@@ -20,7 +20,7 @@ Mutating API requests are accepted only from same-host or loopback browser origi
 
 Bulk delete initially maps to Gmail trash. Permanent deletion is intentionally deferred until the review workflow and audit logging are stronger.
 
-Trash actions use a two-step flow: the first request returns a preview, and execution requires a follow-up request with explicit confirmation. This keeps accidental bulk cleanup from happening on a single click while preserving a fast selected-email workflow.
+Trash actions use a two-step flow: the first request returns a preview plus a short-lived server confirmation token, and execution requires a follow-up request with that token. This keeps accidental bulk cleanup from happening on a single click while preserving a fast selected-email workflow.
 
 Mark-read uses Gmail batch modify requests of up to 1000 message IDs. Trash remains per-message because Gmail exposes safe trash semantics per message, while permanent batch delete is intentionally avoided.
 
@@ -44,7 +44,7 @@ The review store also keeps minimal message metadata with each classification so
 
 The app extracts `https://` and `mailto:` List-Unsubscribe targets. It executes only HTTPS one-click unsubscribe requests when Gmail provides `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; ordinary HTTPS and `mailto:` targets are prepared as review links. One-click execution rejects local/private literal IP targets and does not follow redirects.
 
-One-click unsubscribe also uses the destructive-action confirmation flow. Preview requests do not contact remote unsubscribe endpoints; confirmed requests execute only the validated one-click targets.
+One-click unsubscribe also uses the destructive-action confirmation token flow. Preview requests do not contact remote unsubscribe endpoints; confirmed requests execute only the validated one-click targets.
 
 ## AI Classification
 

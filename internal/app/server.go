@@ -27,17 +27,27 @@ import (
 )
 
 type Server struct {
-	cfg        config.Config
-	gmail      *gmail.Service
-	heuristic  classifier.Classifier
-	ai         classifier.Classifier
-	store      *store.ReviewStore
-	monitor    *monitor.Service
-	scan       *scan.Service
-	lastEmails []domain.EmailSummary
-	state      string
-	mu         sync.RWMutex
+	cfg           config.Config
+	gmail         *gmail.Service
+	heuristic     classifier.Classifier
+	ai            classifier.Classifier
+	store         *store.ReviewStore
+	monitor       *monitor.Service
+	scan          *scan.Service
+	lastEmails    []domain.EmailSummary
+	state         string
+	confirmations map[string]pendingConfirmation
+	mu            sync.RWMutex
+	confirmMu     sync.Mutex
 }
+
+type pendingConfirmation struct {
+	Action    domain.BulkAction
+	IDs       []string
+	ExpiresAt time.Time
+}
+
+const confirmationTTL = 10 * time.Minute
 
 func NewServer(cfg config.Config) (*Server, error) {
 	googleSecret := secrets.FileSecret{Path: cfg.GoogleClientSecretFile}
@@ -50,12 +60,13 @@ func NewServer(cfg config.Config) (*Server, error) {
 		return nil, err
 	}
 	server := &Server{
-		cfg:       cfg,
-		gmail:     gmailService,
-		heuristic: classifier.NewHeuristicClassifier(),
-		ai:        classifier.NewOpenAIResponsesClassifier(secrets.FileSecret{Path: cfg.OpenAIKeyFile}, cfg.OpenAIModel),
-		store:     reviewStore,
-		state:     randomState(),
+		cfg:           cfg,
+		gmail:         gmailService,
+		heuristic:     classifier.NewHeuristicClassifier(),
+		ai:            classifier.NewOpenAIResponsesClassifier(secrets.FileSecret{Path: cfg.OpenAIKeyFile}, cfg.OpenAIModel),
+		store:         reviewStore,
+		state:         randomState(),
+		confirmations: map[string]pendingConfirmation{},
 	}
 	server.monitor = monitor.NewService(server.fetchAndClassify, time.Duration(cfg.MonitorInterval)*time.Second, cfg.MonitorCacheLimit)
 	server.scan = scan.NewService(server.fetchPageAndClassify, server.store.SaveClassifications, cfg.ScanCacheLimit)
@@ -183,9 +194,9 @@ func (s *Server) handleCategoryUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
-		Action  domain.BulkAction `json:"action"`
-		IDs     []string          `json:"ids"`
-		Confirm bool              `json:"confirm"`
+		Action            domain.BulkAction `json:"action"`
+		IDs               []string          `json:"ids"`
+		ConfirmationToken string            `json:"confirmationToken"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -200,13 +211,24 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bulk actions are limited to 1000 emails per request")
 		return
 	}
-	if !payload.Confirm && destructiveAction(payload.Action) {
+	if destructiveAction(payload.Action) && payload.ConfirmationToken == "" {
 		results, err := s.previewAction(payload.Action, ids)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"results": results, "requiresConfirmation": requiresConfirmation(results)})
+		requires := requiresConfirmation(results)
+		response := map[string]any{"results": results, "requiresConfirmation": requires}
+		if requires {
+			token, expiresAt := s.createConfirmation(payload.Action, ids)
+			response["confirmationToken"] = token
+			response["confirmationExpiresAt"] = expiresAt
+		}
+		writeJSON(w, http.StatusOK, response)
+		return
+	}
+	if destructiveAction(payload.Action) && !s.consumeConfirmation(payload.ConfirmationToken, payload.Action, ids) {
+		writeError(w, http.StatusBadRequest, "destructive action confirmation is missing, expired, or does not match the preview")
 		return
 	}
 	var (
@@ -468,6 +490,63 @@ func requiresConfirmation(results []domain.ActionResult) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) createConfirmation(action domain.BulkAction, ids []string) (string, time.Time) {
+	token := randomState()
+	expiresAt := time.Now().UTC().Add(confirmationTTL)
+	s.confirmMu.Lock()
+	defer s.confirmMu.Unlock()
+	if s.confirmations == nil {
+		s.confirmations = map[string]pendingConfirmation{}
+	}
+	s.cleanupConfirmationsLocked(time.Now().UTC())
+	if len(s.confirmations) >= 128 {
+		for key := range s.confirmations {
+			delete(s.confirmations, key)
+			break
+		}
+	}
+	s.confirmations[token] = pendingConfirmation{
+		Action:    action,
+		IDs:       append([]string(nil), ids...),
+		ExpiresAt: expiresAt,
+	}
+	return token, expiresAt
+}
+
+func (s *Server) consumeConfirmation(token string, action domain.BulkAction, ids []string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return false
+	}
+	s.confirmMu.Lock()
+	defer s.confirmMu.Unlock()
+	confirmation, ok := s.confirmations[token]
+	if !ok {
+		return false
+	}
+	delete(s.confirmations, token)
+	if time.Now().UTC().After(confirmation.ExpiresAt) {
+		return false
+	}
+	if confirmation.Action != action || len(confirmation.IDs) != len(ids) {
+		return false
+	}
+	for i := range ids {
+		if confirmation.IDs[i] != ids[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Server) cleanupConfirmationsLocked(now time.Time) {
+	for token, confirmation := range s.confirmations {
+		if now.After(confirmation.ExpiresAt) {
+			delete(s.confirmations, token)
+		}
+	}
 }
 
 func (s *Server) staticHandler() http.Handler {
