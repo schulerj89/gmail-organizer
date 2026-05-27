@@ -27,3 +27,7 @@ AI review:
 ## 2026-05-27: Quick Cleanup Queues
 
 Expose "Ready to unsubscribe" and "Suggested cleanup" as top-level queues above saved categories. These queues speak in outcomes and let the user begin from a cleanup intent instead of first understanding the category model.
+
+## 2026-05-27: Sender Cleanup
+
+Add a sender-grouped unsubscribe queue so the user can work by sender/list instead of selecting individual messages. This supports the product goal of unsubscribing from several senders in a few steps.

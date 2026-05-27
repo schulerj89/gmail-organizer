@@ -79,3 +79,5 @@ Implementation labels should favor user language over storage or API language: "
 Quick cleanup queues now sit above saved categories in the left nav. They support the target 3-step workflow: pick a cleanup queue, select or open messages, then preview and confirm the action.
 
 Cleanup previews and confirmations are shown in a modal workflow instead of an inline panel. This keeps destructive or external-contacting actions focused, preserves the existing backend confirmation token safety model, and makes unsubscribe/delete feel like a guided flow.
+
+Sender cleanup groups unsubscribe-ready emails by sender entirely in the frontend for the first pass. This supports a faster bulk unsubscribe workflow without changing the backend: pick Sender cleanup, select or preview a sender group, then confirm unsubscribe or trash.

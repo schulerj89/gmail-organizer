@@ -26,7 +26,16 @@ type PendingAction = {
   confirmationExpiresAt?: string;
 };
 
-type QueueMode = "category" | "unsubscribe" | "cleanup";
+type QueueMode = "category" | "unsubscribe" | "cleanup" | "senders";
+
+type SenderGroup = {
+  key: string;
+  sender: string;
+  domain: string;
+  emails: EmailSummary[];
+  autoCount: number;
+  categories: Category[];
+};
 
 type DateFilterId =
   | "last_7d"
@@ -166,6 +175,7 @@ function App() {
   }, [emails]);
 
   const selectedEmails = useMemo(() => emails.filter((email) => selected.has(email.id)), [emails, selected]);
+  const senderGroups = useMemo(() => buildSenderGroups(emails), [emails]);
   const visibleEmails = useMemo(() => {
     if (queueMode === "unsubscribe") {
       return emails.filter((email) => email.hasUnsubscribe);
@@ -178,7 +188,7 @@ function App() {
     }
     return emails.filter((email) => email.category === activeCategory);
   }, [activeCategory, emails, queueMode, source]);
-  const activeQueueTitle = queueMode === "unsubscribe" ? "Ready to unsubscribe" : queueMode === "cleanup" ? "Suggested cleanup" : categoryLabel(activeCategory);
+  const activeQueueTitle = queueMode === "senders" ? "Sender cleanup" : queueMode === "unsubscribe" ? "Ready to unsubscribe" : queueMode === "cleanup" ? "Suggested cleanup" : categoryLabel(activeCategory);
   const detailEmail = useMemo(() => emails.find((email) => email.id === detailEmailId) ?? null, [detailEmailId, emails]);
   const activeQuery = useMemo(() => buildGmailQuery(dateFilter, customDate, query), [dateFilter, customDate, query]);
   const selectedDateFilter = dateFilters.find((item) => item.id === dateFilter);
@@ -446,6 +456,14 @@ function App() {
     });
   }
 
+  function selectEmailIds(ids: string[]) {
+    setSelected((current) => {
+      const next = new Set(current);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
   function clearSelected() {
     setSelected(new Set());
   }
@@ -552,6 +570,16 @@ function App() {
             <span>{emails.filter((email) => email.hasUnsubscribe).length}</span>
           </button>
           <button
+            className={queueMode === "senders" ? "nav-item active" : "nav-item"}
+            onClick={() => {
+              setQueueMode("senders");
+              setSelected(new Set());
+            }}
+          >
+            <span>Sender cleanup</span>
+            <span>{senderGroups.length}</span>
+          </button>
+          <button
             className={queueMode === "cleanup" ? "nav-item active" : "nav-item"}
             onClick={() => {
               setQueueMode("cleanup");
@@ -563,7 +591,7 @@ function App() {
           </button>
           <div className="workflow-hint">
             <strong>3-step cleanup</strong>
-            <span>Pick a queue, select or open emails, then preview and confirm.</span>
+            <span>Pick a queue or sender, select emails, then preview and confirm.</span>
           </div>
           <div className="nav-section-title">Saved categories</div>
           {categories.map((category) => {
@@ -589,16 +617,22 @@ function App() {
           <header className="workbench-header">
             <div>
               <h2>{activeQueueTitle}</h2>
-              <p>{visibleEmails.length} visible - {queueMode === "category" ? `${reviewStats?.byCategory[activeCategory] ?? 0} saved - ` : ""}{sourceLabel(source)}</p>
+              <p>{queueMode === "senders" ? `${senderGroups.length} senders - ${emails.filter((email) => email.hasUnsubscribe).length} unsubscribe-ready messages` : `${visibleEmails.length} visible - ${queueMode === "category" ? `${reviewStats?.byCategory[activeCategory] ?? 0} saved - ` : ""}${sourceLabel(source)}`}</p>
             </div>
             <div className="workbench-actions" data-tour="categorize">
               <button onClick={() => classify(false)} disabled={busy || emails.length === 0} title="Sort loaded emails with local rules"><Archive size={16} />Sort Emails</button>
               <button onClick={() => classify(true)} disabled={busy || emails.length === 0} title="Use OpenAI to suggest categories"><Bot size={16} />Suggest Categories</button>
-              <button onClick={selectVisibleEmails} disabled={visibleEmails.length === 0} title="Select all visible emails"><Check size={16} />Select Visible</button>
+              <button
+                onClick={() => queueMode === "senders" ? selectEmailIds(senderGroups.flatMap((group) => group.emails.map((email) => email.id))) : selectVisibleEmails()}
+                disabled={queueMode === "senders" ? senderGroups.length === 0 : visibleEmails.length === 0}
+                title={queueMode === "senders" ? "Select every unsubscribe-ready message grouped by sender" : "Select all visible emails"}
+              >
+                <Check size={16} />{queueMode === "senders" ? "Select All Senders" : "Select Visible"}
+              </button>
             </div>
           </header>
 
-          {storedPage && source === "review_store" && (
+          {storedPage && source === "review_store" && queueMode === "category" && (
             <div className="page-controls">
               <span>Saved Results {Math.min(storedPage.offset + storedPage.emails.length, storedPage.total)}/{storedPage.total}</span>
               <button onClick={() => loadStoredEmails(Math.max(0, storedPage.offset - storedPage.limit))} disabled={busy || storedPage.offset === 0}>Previous</button>
@@ -606,16 +640,27 @@ function App() {
             </div>
           )}
 
-          <EmailList
-            emails={visibleEmails}
-            selected={selected}
-            onToggle={toggle}
-            onOpen={(id) => setDetailEmailId(id)}
-          />
+          {queueMode === "senders" ? (
+            <SenderGroupList
+              groups={senderGroups}
+              selected={selected}
+              onSelect={(ids) => selectEmailIds(ids)}
+              onPreviewUnsubscribe={(ids) => bulk("unsubscribe", ids)}
+              onPreviewTrash={(ids) => bulk("trash", ids)}
+              onOpenSample={(id) => setDetailEmailId(id)}
+            />
+          ) : (
+            <EmailList
+              emails={visibleEmails}
+              selected={selected}
+              onToggle={toggle}
+              onOpen={(id) => setDetailEmailId(id)}
+            />
+          )}
         </section>
       </section>
 
-      {selected.size > 0 && (
+      {selected.size > 0 && actionResults.length === 0 && (
         <section className="bulk-bar" data-tour="cleanup">
           <strong>{selected.size} selected</strong>
           <button onClick={clearSelected}>Clear</button>
@@ -699,6 +744,49 @@ function buildGmailQuery(dateFilter: DateFilterId, customDate: string, extraTerm
     ? `${filter.operator}:${customDate.replace(/-/g, "/")}`
     : filter?.query ?? "newer_than:365d";
   return [dateQuery, extraTerms.trim()].filter(Boolean).join(" ");
+}
+
+function buildSenderGroups(emails: EmailSummary[]): SenderGroup[] {
+  const groups = new Map<string, SenderGroup>();
+  emails.filter((email) => email.hasUnsubscribe).forEach((email) => {
+    const key = senderAddress(email.from);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.emails.push(email);
+      existing.autoCount += email.canAutoUnsubscribe ? 1 : 0;
+      if (!existing.categories.includes(email.category)) {
+        existing.categories.push(email.category);
+      }
+      return;
+    }
+    groups.set(key, {
+      key,
+      sender: senderDisplay(email.from),
+      domain: senderDomain(key),
+      emails: [email],
+      autoCount: email.canAutoUnsubscribe ? 1 : 0,
+      categories: [email.category]
+    });
+  });
+  return Array.from(groups.values()).sort((left, right) => right.emails.length - left.emails.length || right.autoCount - left.autoCount || left.sender.localeCompare(right.sender));
+}
+
+function senderAddress(from: string) {
+  const bracketed = from.match(/<([^>]+)>/);
+  if (bracketed?.[1]) {
+    return bracketed[1].trim().toLowerCase();
+  }
+  const email = from.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return (email?.[0] ?? from).trim().toLowerCase();
+}
+
+function senderDisplay(from: string) {
+  const beforeAddress = from.split("<")[0]?.trim().replace(/^"|"$/g, "");
+  return beforeAddress || senderAddress(from);
+}
+
+function senderDomain(address: string) {
+  return address.includes("@") ? address.split("@").pop() ?? address : address;
 }
 
 function sourceLabel(source: string) {
@@ -786,6 +874,45 @@ function EmailList({ emails, selected, onToggle, onOpen }: { emails: EmailSummar
           <button className="icon-button" onClick={() => onOpen(email.id)} title="Open email details" aria-label="Open email details"><Eye size={16} /></button>
         </article>
       ))}
+    </div>
+  );
+}
+
+function SenderGroupList({ groups, selected, onSelect, onPreviewUnsubscribe, onPreviewTrash, onOpenSample }: { groups: SenderGroup[]; selected: Set<string>; onSelect: (ids: string[]) => void; onPreviewUnsubscribe: (ids: string[]) => void; onPreviewTrash: (ids: string[]) => void; onOpenSample: (id: string) => void }) {
+  if (groups.length === 0) {
+    return (
+      <div className="empty-state">
+        <Unlink size={28} />
+        <h2>No unsubscribe senders found</h2>
+        <p>Refresh live Gmail or widen the date range to find more senders with unsubscribe options.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="sender-list" role="list">
+      {groups.map((group) => {
+        const ids = group.emails.map((email) => email.id);
+        const selectedCount = ids.filter((id) => selected.has(id)).length;
+        const sample = group.emails[0];
+        return (
+          <article key={group.key} className="sender-row" role="listitem">
+            <div className="sender-main">
+              <span className="detail-eyebrow">{group.domain}</span>
+              <h3>{group.sender}</h3>
+              <p>{group.emails.length} message(s), {group.autoCount} automatic unsubscribe, {group.categories.map(categoryLabel).join(", ")}</p>
+              {sample && <span className="snippet">Latest: {sample.subject || "(No subject)"}</span>}
+            </div>
+            <div className="sender-actions">
+              <span>{selectedCount}/{group.emails.length} selected</span>
+              <button onClick={() => onSelect(ids)}><Check size={16} />Select sender</button>
+              {sample && <button onClick={() => onOpenSample(sample.id)}><Eye size={16} />Review sample</button>}
+              <button onClick={() => onPreviewUnsubscribe(ids)}><Unlink size={16} />Preview unsubscribe</button>
+              <button className="danger" onClick={() => onPreviewTrash(ids)}><Trash2 size={16} />Preview trash</button>
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }
