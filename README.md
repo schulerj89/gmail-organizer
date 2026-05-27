@@ -55,6 +55,16 @@ $env:OPENAI_API_KEY_FILE="<absolute path to openai_key.txt>"
 
 Open `http://127.0.0.1:8787`.
 
+If your Google OAuth client is registered with `http://localhost:8080/oauth2callback`, start the app with the matching local callback:
+
+```powershell
+$env:GMAIL_ORGANIZER_PORT="8080"
+$env:GMAIL_ORGANIZER_OAUTH_REDIRECT_URL="http://localhost:8080/oauth2callback"
+go run ./cmd/server
+```
+
+Then open `http://localhost:8080`. While the OAuth consent screen is in testing mode, add the Gmail account you are signing in with under the Google Cloud OAuth consent screen test users list.
+
 Optional monitoring settings:
 
 ```powershell

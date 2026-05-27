@@ -79,6 +79,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/config", s.handleConfig)
 	mux.HandleFunc("GET /api/auth/google/url", s.handleGoogleAuthURL)
 	mux.HandleFunc("GET /api/auth/google/callback", s.handleGoogleCallback)
+	mux.HandleFunc("GET /oauth2callback", s.handleGoogleCallback)
 	mux.HandleFunc("GET /api/emails", s.handleEmails)
 	mux.HandleFunc("POST /api/classify", s.handleClassify)
 	mux.HandleFunc("POST /api/categories", s.handleCategoryUpdate)

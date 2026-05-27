@@ -18,6 +18,7 @@ type Config struct {
 	OpenAIModel            string
 	EnableOpenAI           bool
 	FrontendDistDir        string
+	OAuthRedirectURLValue  string
 	MonitorInterval        int
 	MonitorCacheLimit      int
 	ScanCacheLimit         int
@@ -31,15 +32,16 @@ func Load() (Config, error) {
 
 	port := intFromEnv("GMAIL_ORGANIZER_PORT", 8787)
 	cfg := Config{
-		Host:              stringFromEnv("GMAIL_ORGANIZER_HOST", "127.0.0.1"),
-		Port:              port,
-		DataDir:           stringFromEnv("GMAIL_ORGANIZER_DATA_DIR", filepath.Join(root, "data")),
-		OpenAIModel:       stringFromEnv("OPENAI_MODEL", "gpt-5-mini"),
-		EnableOpenAI:      boolFromEnv("GMAIL_ORGANIZER_ENABLE_OPENAI", true),
-		FrontendDistDir:   stringFromEnv("GMAIL_ORGANIZER_FRONTEND_DIST", filepath.Join(root, "web", "dist")),
-		MonitorInterval:   intFromEnv("GMAIL_ORGANIZER_MONITOR_INTERVAL_SECONDS", 60),
-		MonitorCacheLimit: intFromEnv("GMAIL_ORGANIZER_MONITOR_CACHE_LIMIT", 500),
-		ScanCacheLimit:    intFromEnv("GMAIL_ORGANIZER_SCAN_CACHE_LIMIT", 1000),
+		Host:                  stringFromEnv("GMAIL_ORGANIZER_HOST", "127.0.0.1"),
+		Port:                  port,
+		DataDir:               stringFromEnv("GMAIL_ORGANIZER_DATA_DIR", filepath.Join(root, "data")),
+		OpenAIModel:           stringFromEnv("OPENAI_MODEL", "gpt-5-mini"),
+		EnableOpenAI:          boolFromEnv("GMAIL_ORGANIZER_ENABLE_OPENAI", true),
+		FrontendDistDir:       stringFromEnv("GMAIL_ORGANIZER_FRONTEND_DIST", filepath.Join(root, "web", "dist")),
+		OAuthRedirectURLValue: stringFromEnv("GMAIL_ORGANIZER_OAUTH_REDIRECT_URL", ""),
+		MonitorInterval:       intFromEnv("GMAIL_ORGANIZER_MONITOR_INTERVAL_SECONDS", 60),
+		MonitorCacheLimit:     intFromEnv("GMAIL_ORGANIZER_MONITOR_CACHE_LIMIT", 500),
+		ScanCacheLimit:        intFromEnv("GMAIL_ORGANIZER_SCAN_CACHE_LIMIT", 1000),
 	}
 
 	cfg.GoogleClientSecretFile = stringFromEnv("GOOGLE_CLIENT_SECRET_FILE", discoverFirst(root, "client_secret*.json"))
@@ -71,6 +73,9 @@ func (c Config) ListenAddr() string {
 }
 
 func (c Config) OAuthRedirectURL() string {
+	if c.OAuthRedirectURLValue != "" {
+		return c.OAuthRedirectURLValue
+	}
 	return fmt.Sprintf("http://127.0.0.1:%d/api/auth/google/callback", c.Port)
 }
 

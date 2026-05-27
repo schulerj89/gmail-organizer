@@ -14,6 +14,8 @@ Rationale:
 
 API keys and OAuth client secrets are referenced by file path. They are not copied into the repo, serialized to logs, or returned to the UI.
 
+The Gmail OAuth redirect URL can be supplied with `GMAIL_ORGANIZER_OAUTH_REDIRECT_URL` so a local run can match the exact redirect URI registered on the Google OAuth client without editing the client secret file.
+
 Mutating API requests are accepted only from same-host or loopback browser origins, while originless local clients such as curl remain usable. This reduces the chance that another website open in the browser can trigger local cleanup actions.
 
 ## Gmail Deletion

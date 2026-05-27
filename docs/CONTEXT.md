@@ -26,7 +26,8 @@ Build a secure, memory-efficient Gmail AI organizer that categorizes emails, mon
   - Google OAuth client secret: `GOOGLE_CLIENT_SECRET_FILE`
   - OpenAI key: `OPENAI_API_KEY_FILE`
 - Gmail token storage: `data/gmail_token.json` after OAuth.
-- Verified locally with demo fallback data because Gmail OAuth has not yet been completed in this environment.
+- Gmail OAuth can be started with `GMAIL_ORGANIZER_OAUTH_REDIRECT_URL=http://localhost:8080/oauth2callback` to match the local Google OAuth client redirect. While the OAuth consent screen is in testing mode, the signing account must be listed as a Google Cloud test user.
+- Verified live Gmail OAuth locally on `http://localhost:8080`, fetched 25 messages from `source=gmail`, and ran the classification endpoint with AI enabled on that loaded batch without exposing message contents in logs or chat.
 
 ## Next Work
 
