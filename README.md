@@ -70,6 +70,7 @@ $env:GMAIL_ORGANIZER_SCAN_CACHE_LIMIT="1000"
 ## Security Notes
 
 - The backend binds to `127.0.0.1` by default.
+- Mutating API requests with non-local browser origins are blocked.
 - Email listing fetches metadata headers and snippets, not full message bodies.
 - Bulk delete uses Gmail trash, not immediate permanent deletion.
 - Trash and one-click unsubscribe actions return a preview first and require an explicit confirm request before execution.

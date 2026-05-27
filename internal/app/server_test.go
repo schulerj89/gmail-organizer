@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/schulerj89/gmail-organizer/internal/domain"
@@ -74,5 +76,51 @@ func TestNormalizeIDsDeduplicatesAndSkipsBlanks(t *testing.T) {
 	got := normalizeIDs([]string{" a ", "", "a", "b"})
 	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Fatalf("unexpected ids: %#v", got)
+	}
+}
+
+func TestSecurityHeadersBlockCrossOriginMutatingRequest(t *testing.T) {
+	called := false
+	handler := withSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8787/api/actions", nil)
+	req.Host = "127.0.0.1:8787"
+	req.Header.Set("Origin", "https://evil.example")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("expected forbidden, got %d", resp.Code)
+	}
+	if called {
+		t.Fatal("handler should not have been called")
+	}
+}
+
+func TestSecurityHeadersAllowLoopbackMutatingRequest(t *testing.T) {
+	handler := withSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8787/api/actions", nil)
+	req.Host = "127.0.0.1:8787"
+	req.Header.Set("Origin", "http://localhost:8787")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected no content, got %d", resp.Code)
+	}
+}
+
+func TestSecurityHeadersAllowOriginlessMutatingRequest(t *testing.T) {
+	handler := withSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8787/api/actions", nil)
+	req.Host = "127.0.0.1:8787"
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected no content, got %d", resp.Code)
 	}
 }

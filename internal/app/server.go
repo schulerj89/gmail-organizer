@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -513,6 +515,61 @@ func withSecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		if mutatingMethod(r.Method) && !allowedLocalOrigin(r) {
+			writeError(w, http.StatusForbidden, "cross-origin mutating requests are blocked")
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func mutatingMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func allowedLocalOrigin(r *http.Request) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		origin = strings.TrimSpace(r.Header.Get("Referer"))
+	}
+	if origin == "" {
+		return true
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	requestHost, requestPort := splitHostPort(r.Host)
+	originHost, originPort := splitHostPort(parsed.Host)
+	if strings.EqualFold(originHost, requestHost) && originPort == requestPort {
+		return true
+	}
+	return requestPort == originPort && loopbackHost(requestHost) && loopbackHost(originHost)
+}
+
+func splitHostPort(value string) (string, string) {
+	value = strings.TrimSpace(value)
+	host, port, err := net.SplitHostPort(value)
+	if err == nil {
+		return strings.Trim(host, "[]"), port
+	}
+	if strings.Contains(value, ":") && strings.Count(value, ":") == 1 {
+		parts := strings.SplitN(value, ":", 2)
+		return strings.Trim(parts[0], "[]"), parts[1]
+	}
+	return strings.Trim(value, "[]"), ""
+}
+
+func loopbackHost(host string) bool {
+	host = strings.ToLower(strings.Trim(host, "[]"))
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

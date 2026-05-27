@@ -14,6 +14,8 @@ Rationale:
 
 API keys and OAuth client secrets are referenced by file path. They are not copied into the repo, serialized to logs, or returned to the UI.
 
+Mutating API requests are accepted only from same-host or loopback browser origins, while originless local clients such as curl remain usable. This reduces the chance that another website open in the browser can trigger local cleanup actions.
+
 ## Gmail Deletion
 
 Bulk delete initially maps to Gmail trash. Permanent deletion is intentionally deferred until the review workflow and audit logging are stronger.
