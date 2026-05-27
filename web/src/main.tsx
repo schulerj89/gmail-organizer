@@ -25,6 +25,31 @@ type PendingAction = {
   confirmationExpiresAt?: string;
 };
 
+type DateFilterId =
+  | "last_7d"
+  | "last_30d"
+  | "last_90d"
+  | "last_180d"
+  | "last_365d"
+  | "last_2y"
+  | "older_1y"
+  | "older_2y"
+  | "after_date"
+  | "before_date";
+
+const dateFilters: { id: DateFilterId; label: string; query?: string; operator?: "after" | "before" }[] = [
+  { id: "last_7d", label: "Last 7 days", query: "newer_than:7d" },
+  { id: "last_30d", label: "Last 30 days", query: "newer_than:30d" },
+  { id: "last_90d", label: "Last 90 days", query: "newer_than:90d" },
+  { id: "last_180d", label: "Last 180 days", query: "newer_than:180d" },
+  { id: "last_365d", label: "Last 365 days", query: "newer_than:365d" },
+  { id: "last_2y", label: "Last 2 years", query: "newer_than:2y" },
+  { id: "older_1y", label: "Older than 1 year", query: "older_than:1y" },
+  { id: "older_2y", label: "Older than 2 years", query: "older_than:2y" },
+  { id: "after_date", label: "After date...", operator: "after" },
+  { id: "before_date", label: "Before date...", operator: "before" }
+];
+
 const tutorialStorageKey = "gmail-organizer:tutorial";
 
 const tutorialSteps = [
@@ -36,7 +61,7 @@ const tutorialSteps = [
   {
     target: "query",
     title: "Mailbox scope",
-    body: "The Gmail query chooses what mail to review, max controls the visible page size, and scan limit controls larger background coverage without keeping everything in browser memory."
+    body: "The date dropdown and optional extra Gmail terms create the search query. Max controls the visible page size, and scan limit controls larger background coverage without keeping everything in browser memory."
   },
   {
     target: "scan-monitor",
@@ -84,7 +109,9 @@ function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [emails, setEmails] = useState<EmailSummary[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState("newer_than:365d");
+  const [dateFilter, setDateFilter] = useState<DateFilterId>("last_365d");
+  const [customDate, setCustomDate] = useState(localDateInputValue());
+  const [query, setQuery] = useState("");
   const [max, setMax] = useState(50);
   const [scanLimit, setScanLimit] = useState(1000);
   const [targetCategory, setTargetCategory] = useState<Category>("needs_review");
@@ -133,6 +160,9 @@ function App() {
   }, [emails]);
 
   const selectedEmails = useMemo(() => emails.filter((email) => selected.has(email.id)), [emails, selected]);
+  const activeQuery = useMemo(() => buildGmailQuery(dateFilter, customDate, query), [dateFilter, customDate, query]);
+  const selectedDateFilter = dateFilters.find((item) => item.id === dateFilter);
+  const showCustomDate = Boolean(selectedDateFilter?.operator);
   const activeTutorialStep = tutorialStep === null ? null : tutorialSteps[tutorialStep];
 
   useEffect(() => {
@@ -156,7 +186,7 @@ function App() {
   async function loadEmails() {
     setBusy(true);
     try {
-      const result = await fetchEmails(query, max);
+      const result = await fetchEmails(activeQuery, max);
       setEmails(result.emails);
       setSource(result.source);
       setSelected(new Set());
@@ -250,7 +280,7 @@ function App() {
   async function toggleMonitor() {
     setBusy(true);
     try {
-      const status = monitor?.running ? await stopMonitor() : await startMonitor(query, max, useAIForJobs);
+      const status = monitor?.running ? await stopMonitor() : await startMonitor(activeQuery, max, useAIForJobs);
       setMonitor(status);
       if (status.emails.length > 0) {
         setEmails(status.emails);
@@ -267,7 +297,7 @@ function App() {
   async function toggleScan() {
     setBusy(true);
     try {
-      const status = scan?.running ? await stopScan() : await startScan(query, scanLimit, Math.min(max, 200), useAIForJobs);
+      const status = scan?.running ? await stopScan() : await startScan(activeQuery, scanLimit, Math.min(max, 200), useAIForJobs);
       setScan(status);
       if (status.emails.length > 0) {
         setEmails(status.emails);
@@ -420,7 +450,14 @@ function App() {
 
       <section className="toolbar">
         <div className="query-group" data-tour="query">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Gmail query" title="Gmail search query used for the visible review page" />
+          <select className="date-filter" value={dateFilter} onChange={(event) => setDateFilter(event.target.value as DateFilterId)} aria-label="Date filter" title="Choose a Gmail date search window">
+            {dateFilters.map((filter) => <option key={filter.id} value={filter.id}>{filter.label}</option>)}
+          </select>
+          {showCustomDate && (
+            <input className="date-input" type="date" value={customDate} onChange={(event) => setCustomDate(event.target.value)} aria-label="Custom date" title={`Gmail ${selectedDateFilter?.operator}: date`} />
+          )}
+          <input className="query-input" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Extra Gmail search terms" placeholder="Extra terms, optional" title="Optional Gmail operators, such as category:promotions, from:name@example.com, is:unread, or has:attachment" />
+          <span className="query-preview" title="Generated Gmail query">{activeQuery}</span>
           <input className="max-input" type="number" min={1} max={200} value={max} onChange={(event) => setMax(Number(event.target.value))} aria-label="Max emails" title="Number of emails to load into the visible page" />
           <input className="scan-input" type="number" min={100} max={10000} value={scanLimit} onChange={(event) => setScanLimit(Number(event.target.value))} aria-label="Scan limit" title="Maximum emails for the background scan to classify and store" />
           <button onClick={loadEmails} disabled={busy} title="Reload the visible page from Gmail or stored review state"><RefreshCcw size={16} />Refresh</button>
@@ -594,6 +631,20 @@ function Metric({ label, value }: { label: string; value: number }) {
 
 function categoryLabel(category: Category) {
   return categories.find((item) => item.id === category)?.label ?? category;
+}
+
+function localDateInputValue() {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60 * 1000;
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
+}
+
+function buildGmailQuery(dateFilter: DateFilterId, customDate: string, extraTerms: string) {
+  const filter = dateFilters.find((item) => item.id === dateFilter);
+  const dateQuery = filter?.operator && customDate
+    ? `${filter.operator}:${customDate.replace(/-/g, "/")}`
+    : filter?.query ?? "newer_than:365d";
+  return [dateQuery, extraTerms.trim()].filter(Boolean).join(" ");
 }
 
 function sourceLabel(source: string) {

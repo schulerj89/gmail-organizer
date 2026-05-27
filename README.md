@@ -18,6 +18,7 @@ This is the initial working slice. It includes:
 - First-run guided dashboard tutorial with local browser storage for completed/skipped state and a restart control.
 - Dashboard lanes by category.
 - Per-lane stored totals and load controls for reviewing SQLite-backed category pages.
+- User-friendly Gmail date search presets plus custom before/after calendar date controls.
 - Explicit AI toggle for scan/monitor jobs with bounded backend AI classification chunks.
 - Manual category correction for selected emails.
 - Sender rules from manual category corrections for future monitoring/scanning.

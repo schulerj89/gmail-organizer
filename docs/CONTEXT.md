@@ -8,7 +8,7 @@ Build a secure, memory-efficient Gmail AI organizer that categorizes emails, mon
 
 - Backend: Go local HTTP API in `cmd/server` and `internal`.
 - Frontend: React/Vite app in `web`.
-- Dashboard: first-run tutorial overlay with local browser completion/skipped state, restart tutorial control, category lanes, per-lane stored totals/load controls, query/max controls, manual refresh, scan, monitoring toggle, AI categorize, manual category moves, bulk read, unsubscribe preparation, and trash.
+- Dashboard: first-run tutorial overlay with local browser completion/skipped state, restart tutorial control, category lanes, per-lane stored totals/load controls, user-friendly Gmail date search presets with custom before/after calendar dates, max controls, manual refresh, scan, monitoring toggle, AI categorize, manual category moves, bulk read, unsubscribe preparation, and trash.
 - Persisted review state, sender rules, and action audit live in ignored SQLite database `data/review_state.db`; older JSON files are imported on first startup when the database is empty.
 - Review coverage stats are available at `/api/review` and shown in the dashboard.
 - Manual moves can save local sender rules that auto-categorize future messages from the same sender.
