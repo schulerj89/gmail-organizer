@@ -334,7 +334,8 @@ button:disabled {
 .lane header span {
   background: #ffffff;
   border-radius: 999px;
-  min-width: 28px;
+  font-size: 12px;
+  min-width: 46px;
   padding: 4px 8px;
   text-align: center;
 }

@@ -16,6 +16,7 @@ This is the initial working slice. It includes:
 - Gmail metadata fetch using `gmail.modify` scope.
 - Heuristic categorization and optional OpenAI Responses API categorization.
 - Dashboard lanes by category.
+- Per-lane stored totals and load controls for reviewing SQLite-backed category pages.
 - Explicit AI toggle for scan/monitor jobs with bounded backend AI classification chunks.
 - Manual category correction for selected emails.
 - Sender rules from manual category corrections for future monitoring/scanning.

@@ -95,16 +95,16 @@ function App() {
     }
   }
 
-  async function loadStoredEmails(offset = 0) {
+  async function loadStoredEmails(offset = 0, category = storedCategory) {
     setBusy(true);
     try {
-      const result = await fetchReviewEmails(storedCategory, max, offset);
+      const result = await fetchReviewEmails(category, max, offset);
       setEmails(result.emails);
       setSource(result.source);
       setStoredPage(result);
       setSelected(new Set());
       setPendingAction(null);
-      setNotice(`Loaded ${result.emails.length} of ${result.total} stored ${categoryLabel(storedCategory)} email(s).`);
+      setNotice(`Loaded ${result.emails.length} of ${result.total} stored ${categoryLabel(category)} email(s).`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Failed to load stored review emails.");
     } finally {
@@ -438,9 +438,14 @@ function App() {
             key={category.id}
             label={category.label}
             emails={grouped.get(category.id) ?? []}
+            storedTotal={reviewStats?.byCategory[category.id] ?? 0}
             selected={selected}
             onToggle={toggle}
             onSelectAll={() => selectLane(category.id)}
+            onLoadStored={() => {
+              setStoredCategory(category.id);
+              void loadStoredEmails(0, category.id);
+            }}
           />
         ))}
       </section>
@@ -485,14 +490,15 @@ function actionLabel(action: "trash" | "mark_read" | "unsubscribe") {
   return "mark read";
 }
 
-function Lane({ label, emails, selected, onToggle, onSelectAll }: { label: string; emails: EmailSummary[]; selected: Set<string>; onToggle: (id: string) => void; onSelectAll: () => void }) {
+function Lane({ label, emails, storedTotal, selected, onToggle, onSelectAll, onLoadStored }: { label: string; emails: EmailSummary[]; storedTotal: number; selected: Set<string>; onToggle: (id: string) => void; onSelectAll: () => void; onLoadStored: () => void }) {
   return (
     <div className="lane">
       <header>
         <h2>{label}</h2>
         <div className="lane-actions">
-          <button onClick={onSelectAll} disabled={emails.length === 0}>All</button>
-          <span>{emails.length}</span>
+          <button onClick={onSelectAll} disabled={emails.length === 0} title="Select visible emails">All</button>
+          <button onClick={onLoadStored} disabled={storedTotal === 0} title="Load stored emails">Load</button>
+          <span title={`${storedTotal} stored`}>{emails.length}/{storedTotal}</span>
         </div>
       </header>
       <div className="cards">
