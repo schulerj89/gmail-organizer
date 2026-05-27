@@ -26,7 +26,7 @@ type PendingAction = {
   confirmationExpiresAt?: string;
 };
 
-type QueueMode = "category" | "unsubscribe" | "cleanup" | "senders";
+type QueueMode = "category" | "unsubscribe" | "cleanup" | "senders" | "ai";
 
 type SenderGroup = {
   key: string;
@@ -63,6 +63,7 @@ const dateFilters: { id: DateFilterId; label: string; query?: string; operator?:
 ];
 
 const tutorialStorageKey = "gmail-organizer:tutorial";
+const aiSuggestionThreshold = 0.75;
 
 const tutorialSteps = [
   {
@@ -176,7 +177,11 @@ function App() {
 
   const selectedEmails = useMemo(() => emails.filter((email) => selected.has(email.id)), [emails, selected]);
   const senderGroups = useMemo(() => buildSenderGroups(emails), [emails]);
+  const aiSuggestedEmails = useMemo(() => emails.filter((email) => email.category !== "needs_review" && email.confidence >= aiSuggestionThreshold), [emails]);
   const visibleEmails = useMemo(() => {
+    if (queueMode === "ai") {
+      return aiSuggestedEmails;
+    }
     if (queueMode === "unsubscribe") {
       return emails.filter((email) => email.hasUnsubscribe);
     }
@@ -187,8 +192,8 @@ function App() {
       return emails;
     }
     return emails.filter((email) => email.category === activeCategory);
-  }, [activeCategory, emails, queueMode, source]);
-  const activeQueueTitle = queueMode === "senders" ? "Sender cleanup" : queueMode === "unsubscribe" ? "Ready to unsubscribe" : queueMode === "cleanup" ? "Suggested cleanup" : categoryLabel(activeCategory);
+  }, [activeCategory, aiSuggestedEmails, emails, queueMode, source]);
+  const activeQueueTitle = queueMode === "ai" ? "AI suggestions" : queueMode === "senders" ? "Sender cleanup" : queueMode === "unsubscribe" ? "Ready to unsubscribe" : queueMode === "cleanup" ? "Suggested cleanup" : categoryLabel(activeCategory);
   const detailEmail = useMemo(() => emails.find((email) => email.id === detailEmailId) ?? null, [detailEmailId, emails]);
   const activeQuery = useMemo(() => buildGmailQuery(dateFilter, customDate, query), [dateFilter, customDate, query]);
   const selectedDateFilter = dateFilters.find((item) => item.id === dateFilter);
@@ -443,6 +448,34 @@ function App() {
     }
   }
 
+  async function acceptSuggestions(ids = Array.from(selected)) {
+    const selectedSuggestions = emails.filter((email) => ids.includes(email.id) && email.category !== "needs_review");
+    if (selectedSuggestions.length === 0) {
+      setNotice("Select at least one AI suggestion first.");
+      return;
+    }
+    const byCategory = new Map<Category, string[]>();
+    selectedSuggestions.forEach((email) => {
+      byCategory.set(email.category, [...(byCategory.get(email.category) ?? []), email.id]);
+    });
+    setBusy(true);
+    try {
+      let latest = emails;
+      for (const [category, categoryIds] of byCategory) {
+        const result = await updateCategories(categoryIds, category, false);
+        latest = result.emails;
+      }
+      setEmails(latest);
+      setSelected((current) => new Set(Array.from(current).filter((id) => !ids.includes(id))));
+      await refreshReviewStats();
+      setNotice(`${selectedSuggestions.length} AI suggestion(s) accepted across ${byCategory.size} categor${byCategory.size === 1 ? "y" : "ies"}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Accepting AI suggestions failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function toggle(id: string) {
     setSelected((current) => {
       const next = new Set(current);
@@ -584,6 +617,16 @@ function App() {
             <span>{senderGroups.length}</span>
           </button>
           <button
+            className={queueMode === "ai" ? "nav-item active" : "nav-item"}
+            onClick={() => {
+              setQueueMode("ai");
+              setSelected(new Set());
+            }}
+          >
+            <span>AI suggestions</span>
+            <span>{aiSuggestedEmails.length}</span>
+          </button>
+          <button
             className={queueMode === "cleanup" ? "nav-item active" : "nav-item"}
             onClick={() => {
               setQueueMode("cleanup");
@@ -621,11 +664,12 @@ function App() {
           <header className="workbench-header">
             <div>
               <h2>{activeQueueTitle}</h2>
-              <p>{queueMode === "senders" ? `${senderGroups.length} senders - ${emails.filter((email) => email.hasUnsubscribe).length} unsubscribe-ready messages` : `${visibleEmails.length} visible - ${queueMode === "category" ? `${reviewStats?.byCategory[activeCategory] ?? 0} saved - ` : ""}${sourceLabel(source)}`}</p>
+              <p>{queueMode === "ai" ? `${aiSuggestedEmails.length} high-confidence suggestions ready to accept or inspect` : queueMode === "senders" ? `${senderGroups.length} senders - ${emails.filter((email) => email.hasUnsubscribe).length} unsubscribe-ready messages` : `${visibleEmails.length} visible - ${queueMode === "category" ? `${reviewStats?.byCategory[activeCategory] ?? 0} saved - ` : ""}${sourceLabel(source)}`}</p>
             </div>
             <div className="workbench-actions" data-tour="categorize">
               <button onClick={() => classify(false)} disabled={busy || emails.length === 0} title="Sort loaded emails with local rules"><Archive size={16} />Sort Emails</button>
               <button onClick={() => classify(true)} disabled={busy || emails.length === 0} title="Use OpenAI to suggest categories"><Bot size={16} />Suggest Categories</button>
+              {queueMode === "ai" && <button onClick={() => void acceptSuggestions(visibleEmails.map((email) => email.id))} disabled={busy || visibleEmails.length === 0} title="Accept every visible high-confidence suggestion"><Check size={16} />Accept Visible</button>}
               <button
                 onClick={() => queueMode === "senders" ? selectEmailIds(senderGroups.flatMap((group) => group.emails.map((email) => email.id))) : selectVisibleEmails()}
                 disabled={queueMode === "senders" ? senderGroups.length === 0 : visibleEmails.length === 0}
@@ -676,6 +720,7 @@ function App() {
             Apply to future emails
           </label>
           <button data-tour="move" onClick={moveSelected} disabled={busy}><MoveRight size={16} />Move</button>
+          {queueMode === "ai" && <button onClick={() => void acceptSuggestions()} disabled={busy}><Check size={16} />Accept Suggestions</button>}
           <button onClick={() => bulk("mark_read")} disabled={busy}><MailCheck size={16} />Mark Read</button>
           <button onClick={() => bulk("unsubscribe")} disabled={busy}><Unlink size={16} />Unsubscribe</button>
           <button className="danger" onClick={() => bulk("trash")} disabled={busy}><Trash2 size={16} />Move to Trash</button>

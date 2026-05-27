@@ -19,3 +19,7 @@ Show unsubscribe and move-to-trash previews in a modal instead of an inline page
 ## 2026-05-27: Review Decision Modal
 
 Put category correction inside the email detail modal. The user should be able to open one uncertain message, choose a category, optionally save a sender rule, and return to the queue with the item resolved.
+
+## 2026-05-27: AI Suggestion Acceptance
+
+Show high-confidence suggestions in a dedicated queue with an "Accept Visible" action and contextual selected-message acceptance. This makes AI assistance an explicit user-confirmed step rather than an invisible background relabel.

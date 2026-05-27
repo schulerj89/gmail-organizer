@@ -31,3 +31,7 @@ Expose "Ready to unsubscribe" and "Suggested cleanup" as top-level queues above 
 ## 2026-05-27: Sender Cleanup
 
 Add a sender-grouped unsubscribe queue so the user can work by sender/list instead of selecting individual messages. This supports the product goal of unsubscribing from several senders in a few steps.
+
+## 2026-05-27: AI Suggestions
+
+Expose high-confidence AI/category suggestions as an explicit queue. The user can inspect a row, select individual suggestions, or accept visible suggestions in bulk, keeping AI assistance under user control.

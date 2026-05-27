@@ -19,6 +19,7 @@ This is the initial working slice. It includes:
 - Left-nav cleanup workbench with one contained email queue instead of long category lanes.
 - Quick cleanup queues for unsubscribe-ready messages and suggested cleanup candidates.
 - Sender cleanup queue that groups unsubscribe-ready messages by sender for faster bulk review.
+- AI suggestions queue for accepting high-confidence category decisions in bulk or after inspection.
 - Email detail dialog with sender, subject, snippet, category reason, unsubscribe availability, and single-message actions.
 - Review decision controls in the email detail dialog for correcting category and applying future sender rules.
 - Contextual bulk action bar that appears only after selecting emails.
@@ -109,6 +110,10 @@ Cleanup preview and confirmation:
 Review decision modal:
 
 ![Review decision modal](docs/screenshot-review-decision.png)
+
+AI suggestions queue:
+
+![AI suggestions queue](docs/screenshot-ai-suggestions.png)
 
 ## Security Notes
 

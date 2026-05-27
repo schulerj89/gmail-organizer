@@ -83,3 +83,5 @@ Cleanup previews and confirmations are shown in a modal workflow instead of an i
 Sender cleanup groups unsubscribe-ready emails by sender entirely in the frontend for the first pass. This supports a faster bulk unsubscribe workflow without changing the backend: pick Sender cleanup, select or preview a sender group, then confirm unsubscribe or trash.
 
 Review decisions live inside the email detail dialog. A user can open a message, pick the right category, optionally apply the decision to future emails from that sender, and move it out of Review needed without leaving the modal.
+
+AI suggestions are exposed as a dedicated queue for high-confidence non-review classifications. Accepting suggestions groups selected messages by their suggested category and saves them through the existing category update path so AI-assisted cleanup becomes a short review-and-accept workflow instead of a passive relabeling step.

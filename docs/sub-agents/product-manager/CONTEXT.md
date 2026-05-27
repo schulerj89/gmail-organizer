@@ -20,3 +20,11 @@ The user wants the app to do more of the lifting: guide them toward cleanup outc
 - Gmail search supports date operators such as `after:`, `before:`, `older_than:`, and `newer_than:`; the UI should hide those details behind friendly controls.
 - Bulk destructive actions should remain preview-confirm because the app can mutate Gmail state.
 
+## Source Links
+
+- NN/g usability heuristics: https://media.nngroup.com/media/articles/attachments/Heuristic_Summary1_A4_compressed.pdf
+- Gmail Manage Subscriptions: https://support.google.com/mail/answer/15621070
+- Gmail search operators: https://support.google.com/mail/answer/7190
+- Gmail delete and Trash behavior: https://support.google.com/mail/answer/7401
+- Material navigation drawer: https://m2.material.io/components/navigation-drawer
+- WAI-ARIA modal dialog pattern: https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/
