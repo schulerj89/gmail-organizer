@@ -46,6 +46,13 @@ $env:OPENAI_API_KEY_FILE="<absolute path to openai_key.txt>"
 
 Open `http://127.0.0.1:8787`.
 
+Optional monitoring settings:
+
+```powershell
+$env:GMAIL_ORGANIZER_MONITOR_INTERVAL_SECONDS="60"
+$env:GMAIL_ORGANIZER_MONITOR_CACHE_LIMIT="500"
+```
+
 ## Screenshot
 
 ![Dashboard screenshot](docs/screenshot.png)
@@ -57,6 +64,7 @@ Open `http://127.0.0.1:8787`.
 - Bulk delete uses Gmail trash, not immediate permanent deletion.
 - Unsubscribe actions are prepared for review instead of automatically opening arbitrary remote links.
 - API responses include secret file paths and existence status only, never secret contents.
+- Background monitoring keeps a bounded in-memory cache and uses metadata/snippets rather than full message bodies.
 
 ## Verification
 

@@ -141,6 +141,27 @@ button:disabled {
   padding: 10px 12px;
 }
 
+.monitor-panel {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dfe4e1;
+  border-radius: 8px;
+  color: #435057;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.monitor-panel span {
+  font-size: 13px;
+}
+
+.monitor-error {
+  color: #9d2b1f;
+}
+
 .metrics {
   display: grid;
   gap: 10px;

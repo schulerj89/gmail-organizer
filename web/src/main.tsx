@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Archive, Bot, Check, MailCheck, RefreshCcw, Shield, Trash2, Unlink, Wifi } from "lucide-react";
-import { classifyEmails, fetchConfig, fetchEmails, getGoogleAuthURL, runAction } from "./api";
-import type { AppConfig, Category, EmailSummary } from "./types";
+import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, getGoogleAuthURL, runAction, startMonitor, stopMonitor } from "./api";
+import type { AppConfig, Category, EmailSummary, MonitorStatus } from "./types";
 import "./styles.css";
 
 const categories: { id: Category; label: string }[] = [
@@ -27,22 +27,20 @@ function App() {
   const [source, setSource] = useState("demo");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  const [monitoring, setMonitoring] = useState(false);
+  const [monitor, setMonitor] = useState<MonitorStatus | null>(null);
 
   useEffect(() => {
     void loadConfig();
     void loadEmails();
+    void refreshMonitor();
   }, []);
 
   useEffect(() => {
-    if (!monitoring) {
-      return;
-    }
     const interval = window.setInterval(() => {
-      void loadEmails();
-    }, 60000);
+      void refreshMonitor();
+    }, 5000);
     return () => window.clearInterval(interval);
-  }, [monitoring, query, max]);
+  }, []);
 
   const grouped = useMemo(() => {
     const map = new Map<Category, EmailSummary[]>();
@@ -74,6 +72,19 @@ function App() {
     }
   }
 
+  async function refreshMonitor() {
+    try {
+      const status = await fetchMonitorStatus();
+      setMonitor(status);
+      if (status.running && status.emails.length > 0) {
+        setEmails(status.emails);
+        setSource(status.source || "monitor");
+      }
+    } catch {
+      // Monitoring status should not interrupt inbox review.
+    }
+  }
+
   async function classify(useAI: boolean) {
     setBusy(true);
     try {
@@ -90,6 +101,23 @@ function App() {
   async function authorizeGmail() {
     const { url } = await getGoogleAuthURL();
     window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function toggleMonitor() {
+    setBusy(true);
+    try {
+      const status = monitor?.running ? await stopMonitor() : await startMonitor(query, max, false);
+      setMonitor(status);
+      if (status.emails.length > 0) {
+        setEmails(status.emails);
+        setSource(status.source || "monitor");
+      }
+      setNotice(status.running ? "Backend monitoring is running." : "Backend monitoring stopped.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Monitoring update failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function bulk(action: "trash" | "mark_read" | "unsubscribe") {
@@ -127,7 +155,7 @@ function App() {
       <section className="topbar">
         <div>
           <h1>Gmail Organizer</h1>
-          <p>{source === "gmail" ? "Live Gmail metadata" : "Demo mailbox"} · {emails.length} emails · {selected.size} selected</p>
+          <p>{source === "gmail" ? "Live Gmail metadata" : "Demo mailbox"} - {emails.length} emails - {selected.size} selected</p>
         </div>
         <div className="status-row">
           <Status label="Gmail" active={Boolean(config?.gmailAuthenticated)} />
@@ -141,7 +169,7 @@ function App() {
           <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Gmail query" />
           <input className="max-input" type="number" min={1} max={200} value={max} onChange={(event) => setMax(Number(event.target.value))} aria-label="Max emails" />
           <button onClick={loadEmails} disabled={busy}><RefreshCcw size={16} />Refresh</button>
-          <button className={monitoring ? "monitoring" : ""} onClick={() => setMonitoring((current) => !current)}><Wifi size={16} />Monitor</button>
+          <button className={monitor?.running ? "monitoring" : ""} onClick={toggleMonitor} disabled={busy}><Wifi size={16} />Monitor</button>
           <button onClick={authorizeGmail}><Shield size={16} />Authorize</button>
         </div>
         <div className="action-group">
@@ -154,6 +182,16 @@ function App() {
       </section>
 
       {notice && <div className="notice">{notice}</div>}
+
+      {monitor && (
+        <section className="monitor-panel">
+          <span>{monitor.running ? "Monitoring on" : "Monitoring off"}</span>
+          <span>{monitor.cacheSize}/{monitor.cacheLimit} cached</span>
+          <span>{monitor.intervalSeconds}s interval</span>
+          {monitor.lastSuccessAt && <span>Last success {new Date(monitor.lastSuccessAt).toLocaleTimeString()}</span>}
+          {monitor.lastError && <span className="monitor-error">{monitor.lastError}</span>}
+        </section>
+      )}
 
       <section className="metrics">
         <Metric label="Selected" value={selectedEmails.length} />

@@ -18,6 +18,7 @@ import (
 	"github.com/schulerj89/gmail-organizer/internal/config"
 	"github.com/schulerj89/gmail-organizer/internal/domain"
 	"github.com/schulerj89/gmail-organizer/internal/gmail"
+	"github.com/schulerj89/gmail-organizer/internal/monitor"
 	"github.com/schulerj89/gmail-organizer/internal/secrets"
 	"github.com/schulerj89/gmail-organizer/internal/store"
 )
@@ -28,6 +29,7 @@ type Server struct {
 	heuristic  classifier.Classifier
 	ai         classifier.Classifier
 	store      *store.ReviewStore
+	monitor    *monitor.Service
 	lastEmails []domain.EmailSummary
 	state      string
 	mu         sync.RWMutex
@@ -43,14 +45,16 @@ func NewServer(cfg config.Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{
+	server := &Server{
 		cfg:       cfg,
 		gmail:     gmailService,
 		heuristic: classifier.NewHeuristicClassifier(),
 		ai:        classifier.NewOpenAIResponsesClassifier(secrets.FileSecret{Path: cfg.OpenAIKeyFile}, cfg.OpenAIModel),
 		store:     reviewStore,
 		state:     randomState(),
-	}, nil
+	}
+	server.monitor = monitor.NewService(server.fetchAndClassify, time.Duration(cfg.MonitorInterval)*time.Second, cfg.MonitorCacheLimit)
+	return server, nil
 }
 
 func (s *Server) Routes() http.Handler {
@@ -63,6 +67,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/classify", s.handleClassify)
 	mux.HandleFunc("POST /api/actions", s.handleAction)
 	mux.HandleFunc("GET /api/audit", s.handleAudit)
+	mux.HandleFunc("GET /api/monitor", s.handleMonitorStatus)
+	mux.HandleFunc("POST /api/monitor/start", s.handleMonitorStart)
+	mux.HandleFunc("POST /api/monitor/stop", s.handleMonitorStop)
 	mux.Handle("/", s.staticHandler())
 	return withSecurityHeaders(mux)
 }
@@ -101,16 +108,12 @@ func (s *Server) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleEmails(w http.ResponseWriter, r *http.Request) {
 	max := int64FromQuery(r, "max", 50)
 	query := strings.TrimSpace(r.URL.Query().Get("query"))
-	emails, err := s.gmail.List(r.Context(), query, max)
-	source := "gmail"
+	emails, source, err := s.fetchAndClassify(r.Context(), query, max, false)
 	if err != nil {
-		emails = gmail.DemoEmails()
-		source = "demo"
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
 	}
-	classified := s.applyClassifications(r.Context(), emails, false)
-	classified = s.store.Apply(classified)
-	s.remember(classified)
-	writeJSON(w, http.StatusOK, map[string]any{"source": source, "emails": classified})
+	writeJSON(w, http.StatusOK, map[string]any{"source": source, "emails": emails})
 }
 
 func (s *Server) handleClassify(w http.ResponseWriter, r *http.Request) {
@@ -173,6 +176,38 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+func (s *Server) handleMonitorStatus(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.monitor.Status())
+}
+
+func (s *Server) handleMonitorStart(w http.ResponseWriter, r *http.Request) {
+	var payload monitor.Options
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	s.monitor.Start(context.Background(), payload)
+	writeJSON(w, http.StatusOK, s.monitor.Status())
+}
+
+func (s *Server) handleMonitorStop(w http.ResponseWriter, _ *http.Request) {
+	s.monitor.Stop()
+	writeJSON(w, http.StatusOK, s.monitor.Status())
+}
+
+func (s *Server) fetchAndClassify(ctx context.Context, query string, max int64, preferAI bool) ([]domain.EmailSummary, string, error) {
+	emails, err := s.gmail.List(ctx, query, max)
+	source := "gmail"
+	if err != nil {
+		emails = gmail.DemoEmails()
+		source = "demo"
+	}
+	classified := s.applyClassifications(ctx, emails, preferAI)
+	classified = s.store.Apply(classified)
+	s.remember(classified)
+	return classified, source, nil
 }
 
 func (s *Server) applyClassifications(ctx context.Context, emails []domain.EmailSummary, preferAI bool) []domain.EmailSummary {

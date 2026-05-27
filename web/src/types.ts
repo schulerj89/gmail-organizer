@@ -34,10 +34,24 @@ export type AppConfig = {
   openAIEnabled: boolean;
 };
 
+export type MonitorStatus = {
+  running: boolean;
+  query: string;
+  max: number;
+  useAI: boolean;
+  source: string;
+  cacheSize: number;
+  cacheLimit: number;
+  intervalSeconds: number;
+  lastPollAt?: string;
+  lastSuccessAt?: string;
+  lastError?: string;
+  emails: EmailSummary[];
+};
+
 export type ActionResult = {
   emailId: string;
   status: string;
   message?: string;
   safeLink?: string;
 };
-

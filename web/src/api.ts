@@ -1,4 +1,4 @@
-import type { ActionResult, AppConfig, EmailSummary } from "./types";
+import type { ActionResult, AppConfig, EmailSummary, MonitorStatus } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -40,3 +40,20 @@ export async function getGoogleAuthURL() {
   return request<{ url: string }>("/api/auth/google/url");
 }
 
+export async function fetchMonitorStatus() {
+  return request<MonitorStatus>("/api/monitor");
+}
+
+export async function startMonitor(query: string, max: number, useAI: boolean) {
+  return request<MonitorStatus>("/api/monitor/start", {
+    method: "POST",
+    body: JSON.stringify({ query, max, useAI })
+  });
+}
+
+export async function stopMonitor() {
+  return request<MonitorStatus>("/api/monitor/stop", {
+    method: "POST",
+    body: "{}"
+  });
+}
