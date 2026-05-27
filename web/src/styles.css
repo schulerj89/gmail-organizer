@@ -36,6 +36,21 @@ select {
   flex: 0 0 auto;
 }
 
+.brand-lockup {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brand-lockup img {
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(24, 32, 38, 0.16);
+  flex: 0 0 auto;
+  height: 52px;
+  width: 52px;
+}
+
 h1,
 h2,
 p {
@@ -1078,6 +1093,10 @@ button:disabled {
   .toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .brand-lockup {
+    align-items: flex-start;
   }
 
   .metrics {

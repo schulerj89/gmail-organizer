@@ -49,6 +49,13 @@ type DateFilterId =
   | "after_date"
   | "before_date";
 
+type TutorialStep = {
+  target: string;
+  title: string;
+  body: string;
+  queue?: QueueMode;
+};
+
 const dateFilters: { id: DateFilterId; label: string; query?: string; operator?: "after" | "before" }[] = [
   { id: "last_7d", label: "Last 7 days", query: "newer_than:7d" },
   { id: "last_30d", label: "Last 30 days", query: "newer_than:30d" },
@@ -65,7 +72,7 @@ const dateFilters: { id: DateFilterId; label: string; query?: string; operator?:
 const tutorialStorageKey = "gmail-organizer:tutorial";
 const aiSuggestionThreshold = 0.75;
 
-const tutorialSteps = [
+const tutorialSteps: TutorialStep[] = [
   {
     target: "status",
     title: "Connection status",
@@ -73,48 +80,53 @@ const tutorialSteps = [
   },
   {
     target: "query",
-    title: "Mailbox scope",
-    body: "Choose a date range and optional search terms without remembering Gmail operators. Refresh loads the visible queue, and Find Emails saves more matching results for cleanup."
+    title: "Choose the mailbox scope",
+    body: "Use the date dropdown, calendar options, and optional search terms to build the Gmail query. Refresh loads the visible batch, while Find Emails scans and saves more matches for cleanup."
   },
   {
     target: "scan-monitor",
     title: "Advanced controls",
-    body: "Advanced settings hold power-user controls like visible result count, emails to check, monitoring, and whether new searches should use AI."
-  },
-  {
-    target: "categorize",
-    title: "Categorization",
-    body: "Categorize uses fast local rules. AI Categorize sends bounded metadata chunks through OpenAI for harder messages while keeping prompts, output tokens, and retries controlled."
-  },
-  {
-    target: "lane",
-    title: "Saved category pages",
-    body: "Use the left navigation to open saved results for a category. This lets you keep working through cleanup queues without rescanning Gmail."
+    body: "Advanced keeps the raw Gmail query visible when you need it. It also controls result limits, scan size, monitoring, Gmail authorization, and whether background jobs can use AI."
   },
   {
     target: "coverage",
-    title: "Coverage totals",
-    body: "These counts come from SQLite, not just the visible page. They show total categorized mail, remaining needs-review items, manual moves, sender rules, and reviewed count."
+    title: "Progress summary",
+    body: "These totals come from the local SQLite review store. They show how much mail has been saved, what still needs review, and how much is ready for unsubscribe or cleanup."
+  },
+  {
+    target: "quick-queues",
+    title: "Start with a cleanup goal",
+    body: "The left side is organized around jobs: unsubscribe candidates, sender cleanup, high-confidence AI suggestions, suggested cleanup, and saved category pages."
   },
   {
     target: "lane",
-    title: "Focused queue",
-    body: "The old lanes are now one focused queue. Pick a category on the left, select messages for bulk cleanup, or open a row for more context."
+    title: "Sender cleanup",
+    body: "Sender cleanup groups messages by sender so you can review one sample, select an entire sender, or preview unsubscribe and trash actions before anything runs.",
+    queue: "senders"
   },
   {
     target: "lane",
-    title: "Manual corrections",
-    body: "Select messages to reveal the bulk action bar. From there you can move them, apply future sender rules, mark read, unsubscribe, or move them to trash."
+    title: "AI suggestions queue",
+    body: "AI suggestions collects high-confidence categorized messages. You can accept them in bulk, inspect rows first, or select a subset before applying the recommendation.",
+    queue: "ai"
+  },
+  {
+    target: "categorize",
+    title: "AI-assisted sorting",
+    body: "Sort Emails uses fast local rules. Suggest Categories uses OpenAI with bounded batches, token limits, retry handling, and progress feedback while the buttons stay disabled.",
+    queue: "ai"
   },
   {
     target: "lane",
-    title: "Cleanup actions",
-    body: "Open any row for more context before acting. The detail dialog supports single-message mark read, unsubscribe, and move-to-trash actions."
+    title: "Review a message",
+    body: "Open a row to see the snippet, why it was categorized, and the review decision controls. You can correct the category, save a sender rule, mark read, unsubscribe, or trash from there.",
+    queue: "category"
   },
   {
     target: "lane",
-    title: "Destructive confirmation",
-    body: "Move to Trash and one-click unsubscribe preview first. If a cleanup could change Gmail or contact an unsubscribe endpoint, the app asks for confirmation before it executes."
+    title: "Preview before cleanup",
+    body: "Selecting rows reveals the bulk action bar. Move is immediate for local review state, while unsubscribe and Move to Trash open a Step 3 preview before changing Gmail or contacting a sender endpoint.",
+    queue: "cleanup"
   }
 ];
 
@@ -201,6 +213,24 @@ function App() {
   const activeTutorialStep = tutorialStep === null ? null : tutorialSteps[tutorialStep];
 
   useEffect(() => {
+    if (!activeTutorialStep) {
+      return;
+    }
+    setActionResults([]);
+    setPendingAction(null);
+
+    if (activeTutorialStep.queue && queueMode !== activeTutorialStep.queue) {
+      setQueueMode(activeTutorialStep.queue);
+      setSelected(new Set());
+      setDetailEmailId(null);
+      return;
+    }
+
+    setDetailEmailId(null);
+    setSelected(new Set());
+  }, [activeTutorialStep, queueMode]);
+
+  useEffect(() => {
     document.querySelectorAll(".tour-highlight").forEach((element) => element.classList.remove("tour-highlight"));
     if (!activeTutorialStep) {
       return;
@@ -212,7 +242,7 @@ function App() {
     target.classList.add("tour-highlight");
     target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
     return () => target.classList.remove("tour-highlight");
-  }, [activeTutorialStep]);
+  }, [activeTutorialStep, detailEmailId, queueMode, selected.size]);
 
   useEffect(() => {
     if (detailEmailId && !emails.some((email) => email.id === detailEmailId)) {
@@ -530,9 +560,12 @@ function App() {
   return (
     <main className="app-shell">
       <section className="topbar">
-        <div>
-          <h1>Gmail Organizer</h1>
-          <p>{sourceLabel(source)} - {emails.length} loaded - {selected.size} selected</p>
+        <div className="brand-lockup">
+          <img src="/logo.svg" alt="" aria-hidden="true" />
+          <div>
+            <h1>Gmail Organizer</h1>
+            <p>{sourceLabel(source)} - {emails.length} loaded - {selected.size} selected</p>
+          </div>
         </div>
         <div className="status-row">
           <button className="tutorial-button" onClick={restartTutorial} title="Restart the guided dashboard tutorial"><CircleHelp size={16} />Tutorial</button>
@@ -594,7 +627,7 @@ function App() {
       </section>
 
       <section className="workspace">
-        <aside className="left-nav" aria-label="Cleanup sections">
+        <aside className="left-nav" aria-label="Cleanup sections" data-tour="quick-queues">
           <div className="nav-section-title"><Inbox size={16} />Quick cleanup</div>
           <button
             className={queueMode === "unsubscribe" ? "nav-item active" : "nav-item"}
@@ -992,7 +1025,7 @@ function EmailDetailModal({ email, selected, categories, onClose, onToggle, onMo
 
   return (
     <div className="detail-backdrop" role="presentation" onMouseDown={onClose}>
-      <aside className="detail-modal" role="dialog" aria-modal="true" aria-label="Email details" onMouseDown={(event) => event.stopPropagation()}>
+      <aside className="detail-modal" role="dialog" aria-modal="true" aria-label="Email details" onMouseDown={(event) => event.stopPropagation()} data-tour="detail">
         <header>
           <div>
             <span className="detail-eyebrow">{categoryLabel(email.category)} - {Math.round(email.confidence * 100)}% confidence</span>
