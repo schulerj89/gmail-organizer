@@ -29,3 +29,7 @@ The app uses a local heuristic classifier as a deterministic fallback and an Ope
 ## Monitoring
 
 The dashboard controls a backend polling service instead of only refreshing in the browser. The monitor keeps a bounded in-memory cache, defaults to local classification to avoid repeated AI calls, and exposes status through `/api/monitor` for UI polling.
+
+## Paged Scanning
+
+Large inbox cleanup uses a scan job that pages through Gmail metadata in batches of up to 200 messages. Each batch is classified and persisted before the next page is fetched, while the UI receives only a bounded recent cache. This keeps memory bounded even when the requested scan limit is much larger than the visible dashboard cache.

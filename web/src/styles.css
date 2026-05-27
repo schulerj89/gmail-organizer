@@ -97,6 +97,10 @@ input {
   width: 78px;
 }
 
+.scan-input {
+  width: 96px;
+}
+
 button {
   align-items: center;
   background: #ffffff;

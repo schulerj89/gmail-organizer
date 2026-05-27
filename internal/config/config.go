@@ -20,6 +20,7 @@ type Config struct {
 	FrontendDistDir        string
 	MonitorInterval        int
 	MonitorCacheLimit      int
+	ScanCacheLimit         int
 }
 
 func Load() (Config, error) {
@@ -38,6 +39,7 @@ func Load() (Config, error) {
 		FrontendDistDir:   stringFromEnv("GMAIL_ORGANIZER_FRONTEND_DIST", filepath.Join(root, "web", "dist")),
 		MonitorInterval:   intFromEnv("GMAIL_ORGANIZER_MONITOR_INTERVAL_SECONDS", 60),
 		MonitorCacheLimit: intFromEnv("GMAIL_ORGANIZER_MONITOR_CACHE_LIMIT", 500),
+		ScanCacheLimit:    intFromEnv("GMAIL_ORGANIZER_SCAN_CACHE_LIMIT", 1000),
 	}
 
 	cfg.GoogleClientSecretFile = stringFromEnv("GOOGLE_CLIENT_SECRET_FILE", discoverFirst(root, "client_secret*.json"))
@@ -57,6 +59,9 @@ func Load() (Config, error) {
 	}
 	if cfg.MonitorCacheLimit < 50 {
 		cfg.MonitorCacheLimit = 50
+	}
+	if cfg.ScanCacheLimit < 100 {
+		cfg.ScanCacheLimit = 100
 	}
 	return cfg, nil
 }

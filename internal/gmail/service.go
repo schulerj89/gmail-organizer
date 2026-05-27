@@ -67,13 +67,18 @@ func (s *Service) Exchange(ctx context.Context, code string) error {
 }
 
 func (s *Service) List(ctx context.Context, query string, max int64) ([]domain.EmailSummary, error) {
+	emails, _, err := s.ListPage(ctx, query, "", max)
+	return emails, err
+}
+
+func (s *Service) ListPage(ctx context.Context, query string, pageToken string, max int64) ([]domain.EmailSummary, string, error) {
 	client, err := s.authorizedClient(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	service, err := gmailapi.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if max <= 0 || max > 200 {
 		max = 50
@@ -83,9 +88,12 @@ func (s *Service) List(ctx context.Context, query string, max int64) ([]domain.E
 	}
 
 	listCall := service.Users.Messages.List("me").Q(query).MaxResults(max)
+	if strings.TrimSpace(pageToken) != "" {
+		listCall.PageToken(pageToken)
+	}
 	resp, err := listCall.Do()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	emails := make([]domain.EmailSummary, 0, len(resp.Messages))
@@ -95,11 +103,11 @@ func (s *Service) List(ctx context.Context, query string, max int64) ([]domain.E
 			MetadataHeaders("From", "Subject", "Date", "List-Unsubscribe", "List-Unsubscribe-Post").
 			Do()
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		emails = append(emails, toEmailSummary(item))
 	}
-	return emails, nil
+	return emails, resp.NextPageToken, nil
 }
 
 func (s *Service) Trash(ctx context.Context, ids []string) ([]domain.ActionResult, error) {

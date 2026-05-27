@@ -19,6 +19,7 @@ import (
 	"github.com/schulerj89/gmail-organizer/internal/domain"
 	"github.com/schulerj89/gmail-organizer/internal/gmail"
 	"github.com/schulerj89/gmail-organizer/internal/monitor"
+	"github.com/schulerj89/gmail-organizer/internal/scan"
 	"github.com/schulerj89/gmail-organizer/internal/secrets"
 	"github.com/schulerj89/gmail-organizer/internal/store"
 )
@@ -30,6 +31,7 @@ type Server struct {
 	ai         classifier.Classifier
 	store      *store.ReviewStore
 	monitor    *monitor.Service
+	scan       *scan.Service
 	lastEmails []domain.EmailSummary
 	state      string
 	mu         sync.RWMutex
@@ -54,6 +56,7 @@ func NewServer(cfg config.Config) (*Server, error) {
 		state:     randomState(),
 	}
 	server.monitor = monitor.NewService(server.fetchAndClassify, time.Duration(cfg.MonitorInterval)*time.Second, cfg.MonitorCacheLimit)
+	server.scan = scan.NewService(server.fetchPageAndClassify, server.store.SaveClassifications, cfg.ScanCacheLimit)
 	return server, nil
 }
 
@@ -70,6 +73,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/monitor", s.handleMonitorStatus)
 	mux.HandleFunc("POST /api/monitor/start", s.handleMonitorStart)
 	mux.HandleFunc("POST /api/monitor/stop", s.handleMonitorStop)
+	mux.HandleFunc("GET /api/scan", s.handleScanStatus)
+	mux.HandleFunc("POST /api/scan/start", s.handleScanStart)
+	mux.HandleFunc("POST /api/scan/stop", s.handleScanStop)
 	mux.Handle("/", s.staticHandler())
 	return withSecurityHeaders(mux)
 }
@@ -197,6 +203,25 @@ func (s *Server) handleMonitorStop(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.monitor.Status())
 }
 
+func (s *Server) handleScanStatus(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.scan.Status())
+}
+
+func (s *Server) handleScanStart(w http.ResponseWriter, r *http.Request) {
+	var payload scan.Options
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	s.scan.Start(context.Background(), payload)
+	writeJSON(w, http.StatusOK, s.scan.Status())
+}
+
+func (s *Server) handleScanStop(w http.ResponseWriter, _ *http.Request) {
+	s.scan.Stop()
+	writeJSON(w, http.StatusOK, s.scan.Status())
+}
+
 func (s *Server) fetchAndClassify(ctx context.Context, query string, max int64, preferAI bool) ([]domain.EmailSummary, string, error) {
 	emails, err := s.gmail.List(ctx, query, max)
 	source := "gmail"
@@ -208,6 +233,23 @@ func (s *Server) fetchAndClassify(ctx context.Context, query string, max int64, 
 	classified = s.store.Apply(classified)
 	s.remember(classified)
 	return classified, source, nil
+}
+
+func (s *Server) fetchPageAndClassify(ctx context.Context, query string, pageToken string, batchSize int64, preferAI bool) ([]domain.EmailSummary, string, string, error) {
+	emails, nextToken, err := s.gmail.ListPage(ctx, query, pageToken, batchSize)
+	source := "gmail"
+	if err != nil {
+		if pageToken != "" {
+			return nil, "", "", err
+		}
+		emails = gmail.DemoEmails()
+		nextToken = ""
+		source = "demo"
+	}
+	classified := s.applyClassifications(ctx, emails, preferAI)
+	classified = s.store.Apply(classified)
+	s.remember(classified)
+	return classified, nextToken, source, nil
 }
 
 func (s *Server) applyClassifications(ctx context.Context, emails []domain.EmailSummary, preferAI bool) []domain.EmailSummary {

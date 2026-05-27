@@ -1,4 +1,4 @@
-import type { ActionResult, AppConfig, EmailSummary, MonitorStatus } from "./types";
+import type { ActionResult, AppConfig, EmailSummary, MonitorStatus, ScanStatus } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -53,6 +53,24 @@ export async function startMonitor(query: string, max: number, useAI: boolean) {
 
 export async function stopMonitor() {
   return request<MonitorStatus>("/api/monitor/stop", {
+    method: "POST",
+    body: "{}"
+  });
+}
+
+export async function fetchScanStatus() {
+  return request<ScanStatus>("/api/scan");
+}
+
+export async function startScan(query: string, limit: number, batchSize: number, useAI: boolean) {
+  return request<ScanStatus>("/api/scan/start", {
+    method: "POST",
+    body: JSON.stringify({ query, limit, batchSize, useAI })
+  });
+}
+
+export async function stopScan() {
+  return request<ScanStatus>("/api/scan/stop", {
     method: "POST",
     body: "{}"
   });

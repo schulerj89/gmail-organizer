@@ -51,6 +51,24 @@ export type MonitorStatus = {
   emails: EmailSummary[];
 };
 
+export type ScanStatus = {
+  running: boolean;
+  completed: boolean;
+  query: string;
+  useAI: boolean;
+  processed: number;
+  limit: number;
+  batchSize: number;
+  source: string;
+  hasMore: boolean;
+  cacheSize: number;
+  cacheLimit: number;
+  lastError?: string;
+  startedAt?: string;
+  endedAt?: string;
+  emails: EmailSummary[];
+};
+
 export type ActionResult = {
   emailId: string;
   status: string;

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Archive, Bot, Check, MailCheck, RefreshCcw, Shield, Trash2, Unlink, Wifi } from "lucide-react";
-import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, getGoogleAuthURL, runAction, startMonitor, stopMonitor } from "./api";
-import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus } from "./types";
+import { Archive, Bot, Check, MailCheck, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
+import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan } from "./api";
+import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ScanStatus } from "./types";
 import "./styles.css";
 
 const categories: { id: Category; label: string }[] = [
@@ -24,21 +24,25 @@ function App() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("newer_than:365d");
   const [max, setMax] = useState(50);
+  const [scanLimit, setScanLimit] = useState(1000);
   const [source, setSource] = useState("demo");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [monitor, setMonitor] = useState<MonitorStatus | null>(null);
+  const [scan, setScan] = useState<ScanStatus | null>(null);
   const [actionResults, setActionResults] = useState<ActionResult[]>([]);
 
   useEffect(() => {
     void loadConfig();
     void loadEmails();
     void refreshMonitor();
+    void refreshScan();
   }, []);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       void refreshMonitor();
+      void refreshScan();
     }, 5000);
     return () => window.clearInterval(interval);
   }, []);
@@ -86,6 +90,19 @@ function App() {
     }
   }
 
+  async function refreshScan() {
+    try {
+      const status = await fetchScanStatus();
+      setScan(status);
+      if ((status.running || status.completed) && status.emails.length > 0) {
+        setEmails(status.emails);
+        setSource(status.source || "scan");
+      }
+    } catch {
+      // Scan status should not interrupt inbox review.
+    }
+  }
+
   async function classify(useAI: boolean) {
     setBusy(true);
     try {
@@ -116,6 +133,23 @@ function App() {
       setNotice(status.running ? "Backend monitoring is running." : "Backend monitoring stopped.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Monitoring update failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleScan() {
+    setBusy(true);
+    try {
+      const status = scan?.running ? await stopScan() : await startScan(query, scanLimit, Math.min(max, 200), false);
+      setScan(status);
+      if (status.emails.length > 0) {
+        setEmails(status.emails);
+        setSource(status.source || "scan");
+      }
+      setNotice(status.running ? "Mailbox scan started." : "Mailbox scan stopped.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Scan update failed.");
     } finally {
       setBusy(false);
     }
@@ -171,7 +205,9 @@ function App() {
         <div className="query-group">
           <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Gmail query" />
           <input className="max-input" type="number" min={1} max={200} value={max} onChange={(event) => setMax(Number(event.target.value))} aria-label="Max emails" />
+          <input className="scan-input" type="number" min={100} max={10000} value={scanLimit} onChange={(event) => setScanLimit(Number(event.target.value))} aria-label="Scan limit" />
           <button onClick={loadEmails} disabled={busy}><RefreshCcw size={16} />Refresh</button>
+          <button className={scan?.running ? "monitoring" : ""} onClick={toggleScan} disabled={busy}><Search size={16} />Scan</button>
           <button className={monitor?.running ? "monitoring" : ""} onClick={toggleMonitor} disabled={busy}><Wifi size={16} />Monitor</button>
           <button onClick={authorizeGmail}><Shield size={16} />Authorize</button>
         </div>
@@ -193,6 +229,17 @@ function App() {
           <span>{monitor.intervalSeconds}s interval</span>
           {monitor.lastSuccessAt && <span>Last success {new Date(monitor.lastSuccessAt).toLocaleTimeString()}</span>}
           {monitor.lastError && <span className="monitor-error">{monitor.lastError}</span>}
+        </section>
+      )}
+
+      {scan && (
+        <section className="monitor-panel">
+          <span>{scan.running ? "Scan running" : scan.completed ? "Scan complete" : "Scan idle"}</span>
+          <span>{scan.processed}/{scan.limit} processed</span>
+          <span>{scan.batchSize} batch</span>
+          <span>{scan.cacheSize}/{scan.cacheLimit} cached</span>
+          {scan.hasMore && <span>More available</span>}
+          {scan.lastError && <span className="monitor-error">{scan.lastError}</span>}
         </section>
       )}
 
