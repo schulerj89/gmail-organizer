@@ -58,3 +58,21 @@ func TestOverlayAIClassificationsKeepsFallbackOnFailure(t *testing.T) {
 		t.Fatalf("expected fallback category, got %s", got[0].Category)
 	}
 }
+
+func TestPreviewActionRequiresTrashConfirmation(t *testing.T) {
+	server := &Server{}
+	results, err := server.previewAction(domain.ActionTrash, []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if !requiresConfirmation(results) {
+		t.Fatalf("expected confirmation requirement, got %#v", results)
+	}
+}
+
+func TestNormalizeIDsDeduplicatesAndSkipsBlanks(t *testing.T) {
+	got := normalizeIDs([]string{" a ", "", "a", "b"})
+	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Fatalf("unexpected ids: %#v", got)
+	}
+}

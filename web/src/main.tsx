@@ -18,6 +18,11 @@ const categories: { id: Category; label: string }[] = [
   { id: "unwanted", label: "Unwanted" }
 ];
 
+type PendingAction = {
+  action: "trash" | "unsubscribe";
+  ids: string[];
+};
+
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [emails, setEmails] = useState<EmailSummary[]>([]);
@@ -35,6 +40,7 @@ function App() {
   const [scan, setScan] = useState<ScanStatus | null>(null);
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null);
   const [actionResults, setActionResults] = useState<ActionResult[]>([]);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
   useEffect(() => {
     void loadConfig();
@@ -75,6 +81,7 @@ function App() {
       setEmails(result.emails);
       setSource(result.source);
       setSelected(new Set());
+      setPendingAction(null);
       setNotice(result.source === "demo" ? "Showing demo data until Gmail is authorized." : "Loaded Gmail metadata.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Failed to load emails.");
@@ -176,21 +183,55 @@ function App() {
       setNotice("Select at least one email first.");
       return;
     }
+    setPendingAction(null);
     setBusy(true);
     try {
-      const result = await runAction(action, ids);
+      const result = await runAction(action, ids, action === "mark_read");
       setActionResults(result.results);
-      const preparedLinks = result.results.filter((item) => item.safeLink);
-      const executed = result.results.filter((item) => item.status === "unsubscribed");
-      setNotice(`${result.results.length} action result(s). ${executed.length ? `${executed.length} one-click unsubscribe request(s) accepted. ` : ""}${preparedLinks.length ? "Review links are ready below." : ""}`);
-      if (action === "trash") {
-        setEmails((current) => current.filter((email) => !selected.has(email.id)));
-        setSelected(new Set());
+      if (result.requiresConfirmation && (action === "trash" || action === "unsubscribe")) {
+        setPendingAction({ action, ids });
+        setNotice(`${result.results.length} action preview(s). Confirm to execute ${actionLabel(action)}.`);
+      } else {
+        finishAction(action, result.results);
       }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Bulk action failed.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function confirmPendingAction() {
+    if (!pendingAction) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await runAction(pendingAction.action, pendingAction.ids, true);
+      setActionResults(result.results);
+      finishAction(pendingAction.action, result.results);
+      setPendingAction(null);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Bulk action failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function cancelPendingAction() {
+    setPendingAction(null);
+    setActionResults([]);
+    setNotice("Pending cleanup action cancelled.");
+  }
+
+  function finishAction(action: "trash" | "mark_read" | "unsubscribe", results: ActionResult[]) {
+    const preparedLinks = results.filter((item) => item.safeLink);
+    const executed = results.filter((item) => item.status === "unsubscribed");
+    setNotice(`${results.length} action result(s). ${executed.length ? `${executed.length} one-click unsubscribe request(s) accepted. ` : ""}${preparedLinks.length ? "Review links are ready below." : ""}`);
+    if (action === "trash") {
+      const trashed = new Set(results.filter((item) => item.status === "trashed").map((item) => item.emailId));
+      setEmails((current) => current.filter((email) => !trashed.has(email.id)));
+      setSelected((current) => new Set(Array.from(current).filter((id) => !trashed.has(id))));
     }
   }
 
@@ -328,8 +369,16 @@ function App() {
 
       {actionResults.length > 0 && (
         <section className="action-results">
-          {actionResults.map((result) => (
-            <div key={`${result.emailId}-${result.status}`} className="action-result">
+          {pendingAction && (
+            <div className="confirm-row">
+              <strong>{actionLabel(pendingAction.action)} pending</strong>
+              <span>{pendingAction.ids.length} email(s)</span>
+              <button className="danger" onClick={confirmPendingAction} disabled={busy}>Confirm</button>
+              <button onClick={cancelPendingAction} disabled={busy}>Cancel</button>
+            </div>
+          )}
+          {actionResults.map((result, index) => (
+            <div key={`${result.emailId}-${result.status}-${index}`} className="action-result">
               <strong>{result.status}</strong>
               <span>{result.message || result.emailId}</span>
               {result.safeLink && <a href={result.safeLink} target="_blank" rel="noreferrer">Open review link</a>}
@@ -376,6 +425,16 @@ function Metric({ label, value }: { label: string; value: number }) {
 
 function categoryLabel(category: Category) {
   return categories.find((item) => item.id === category)?.label ?? category;
+}
+
+function actionLabel(action: "trash" | "mark_read" | "unsubscribe") {
+  if (action === "trash") {
+    return "trash";
+  }
+  if (action === "unsubscribe") {
+    return "unsubscribe";
+  }
+  return "mark read";
 }
 
 function Lane({ label, emails, selected, onToggle, onSelectAll }: { label: string; emails: EmailSummary[]; selected: Set<string>; onToggle: (id: string) => void; onSelectAll: () => void }) {

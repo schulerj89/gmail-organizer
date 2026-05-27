@@ -18,6 +18,8 @@ API keys and OAuth client secrets are referenced by file path. They are not copi
 
 Bulk delete initially maps to Gmail trash. Permanent deletion is intentionally deferred until the review workflow and audit logging are stronger.
 
+Trash actions use a two-step flow: the first request returns a preview, and execution requires a follow-up request with explicit confirmation. This keeps accidental bulk cleanup from happening on a single click while preserving a fast selected-email workflow.
+
 ## Manual Review
 
 Manual category moves persist through the same local review state as classifier output. A manual move uses confidence `1.0` and a clear reason so user corrections override later low-confidence classifier output when the email is loaded again.
@@ -33,6 +35,8 @@ Review coverage is calculated from the local classification state, not from Gmai
 ## Unsubscribe
 
 The app extracts `https://` and `mailto:` List-Unsubscribe targets. It executes only HTTPS one-click unsubscribe requests when Gmail provides `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; ordinary HTTPS and `mailto:` targets are prepared as review links. One-click execution rejects local/private literal IP targets and does not follow redirects.
+
+One-click unsubscribe also uses the destructive-action confirmation flow. Preview requests do not contact remote unsubscribe endpoints; confirmed requests execute only the validated one-click targets.
 
 ## AI Classification
 

@@ -21,6 +21,7 @@ This is the initial working slice. It includes:
 - Sender rules from manual category corrections for future monitoring/scanning.
 - Persisted review coverage metrics across scans and manual moves.
 - Bulk trash, mark-read, and unsubscribe-preparation actions.
+- Two-step confirmation for destructive trash and one-click unsubscribe actions.
 - One-click unsubscribe execution for Gmail messages that advertise `List-Unsubscribe-Post: List-Unsubscribe=One-Click`.
 - Paged mailbox scanning for larger cleanup passes without loading the full mailbox into memory.
 - Demo data fallback when Gmail is not authenticated.
@@ -69,6 +70,7 @@ $env:GMAIL_ORGANIZER_SCAN_CACHE_LIMIT="1000"
 - The backend binds to `127.0.0.1` by default.
 - Email listing fetches metadata headers and snippets, not full message bodies.
 - Bulk delete uses Gmail trash, not immediate permanent deletion.
+- Trash and one-click unsubscribe actions return a preview first and require an explicit confirm request before execution.
 - Unsubscribe actions execute only standards-based HTTPS one-click requests; ordinary HTTPS and `mailto:` unsubscribe targets are prepared as review links.
 - API responses include secret file paths and existence status only, never secret contents.
 - Background monitoring keeps a bounded in-memory cache and uses metadata/snippets rather than full message bodies.

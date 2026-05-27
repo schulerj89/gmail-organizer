@@ -204,12 +204,32 @@ button:disabled {
   align-items: center;
   display: grid;
   gap: 8px;
-  grid-template-columns: 110px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(150px, auto) minmax(0, 1fr) auto;
+}
+
+.confirm-row {
+  align-items: center;
+  border-bottom: 1px solid #e6ebe8;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 150px minmax(0, 1fr) auto auto;
+  padding-bottom: 8px;
+}
+
+.confirm-row strong {
+  color: #9d2b1f;
+  font-size: 13px;
+}
+
+.confirm-row span {
+  color: #435057;
+  font-size: 13px;
 }
 
 .action-result strong {
   color: #1e684e;
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .action-result span,

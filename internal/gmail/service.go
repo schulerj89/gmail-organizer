@@ -294,6 +294,32 @@ func UnsubscribeResults(ctx context.Context, emails []domain.EmailSummary, ids [
 	return results
 }
 
+func PreviewUnsubscribeResults(emails []domain.EmailSummary, ids []string) []domain.ActionResult {
+	index := map[string]domain.EmailSummary{}
+	for _, email := range emails {
+		index[email.ID] = email
+	}
+	results := make([]domain.ActionResult, 0, len(ids))
+	for _, id := range ids {
+		email, ok := index[id]
+		if !ok || email.UnsubscribeTarget == "" {
+			results = append(results, domain.ActionResult{EmailID: id, Status: "skipped", Message: "No unsubscribe header was available."})
+			continue
+		}
+		if email.CanAutoUnsubscribe && email.UnsubscribeMethod == "one_click_post" {
+			results = append(results, domain.ActionResult{EmailID: id, Status: "needs_confirmation", Message: "Confirm to send a one-click unsubscribe request."})
+			continue
+		}
+		results = append(results, domain.ActionResult{
+			EmailID:  id,
+			Status:   "prepared",
+			Message:  "Review this unsubscribe target before opening it.",
+			SafeLink: email.UnsubscribeTarget,
+		})
+	}
+	return results
+}
+
 func executeOneClickUnsubscribe(ctx context.Context, email domain.EmailSummary) domain.ActionResult {
 	if !safeOneClickURL(email.UnsubscribeTarget) {
 		return domain.ActionResult{EmailID: email.ID, Status: "blocked", Message: "Unsubscribe target failed safety validation."}

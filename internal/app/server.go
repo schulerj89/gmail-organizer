@@ -180,15 +180,30 @@ func (s *Server) handleCategoryUpdate(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
-		Action domain.BulkAction `json:"action"`
-		IDs    []string          `json:"ids"`
+		Action  domain.BulkAction `json:"action"`
+		IDs     []string          `json:"ids"`
+		Confirm bool              `json:"confirm"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&payload); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if len(payload.IDs) == 0 {
+	ids := normalizeIDs(payload.IDs)
+	if len(ids) == 0 {
 		writeError(w, http.StatusBadRequest, "no email ids were provided")
+		return
+	}
+	if len(ids) > 1000 {
+		writeError(w, http.StatusBadRequest, "bulk actions are limited to 1000 emails per request")
+		return
+	}
+	if !payload.Confirm && destructiveAction(payload.Action) {
+		results, err := s.previewAction(payload.Action, ids)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"results": results, "requiresConfirmation": requiresConfirmation(results)})
 		return
 	}
 	var (
@@ -197,11 +212,11 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	)
 	switch payload.Action {
 	case domain.ActionTrash:
-		results, err = s.gmail.Trash(r.Context(), payload.IDs)
+		results, err = s.gmail.Trash(r.Context(), ids)
 	case domain.ActionMarkRead:
-		results, err = s.gmail.MarkRead(r.Context(), payload.IDs)
+		results, err = s.gmail.MarkRead(r.Context(), ids)
 	case domain.ActionUnsubscribe:
-		results = gmail.UnsubscribeResults(r.Context(), s.snapshot(), payload.IDs)
+		results = gmail.UnsubscribeResults(r.Context(), s.snapshot(), ids)
 	default:
 		err = errors.New("unsupported action")
 	}
@@ -209,8 +224,23 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	_ = s.store.RecordAction(payload.Action, payload.IDs, results)
-	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+	_ = s.store.RecordAction(payload.Action, ids, results)
+	writeJSON(w, http.StatusOK, map[string]any{"results": results, "requiresConfirmation": false})
+}
+
+func (s *Server) previewAction(action domain.BulkAction, ids []string) ([]domain.ActionResult, error) {
+	switch action {
+	case domain.ActionTrash:
+		results := make([]domain.ActionResult, 0, len(ids))
+		for _, id := range ids {
+			results = append(results, domain.ActionResult{EmailID: id, Status: "needs_confirmation", Message: "Confirm to move this message to Gmail trash."})
+		}
+		return results, nil
+	case domain.ActionUnsubscribe:
+		return gmail.PreviewUnsubscribeResults(s.snapshot(), ids), nil
+	default:
+		return nil, errors.New("unsupported action")
+	}
 }
 
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
@@ -382,6 +412,36 @@ func (s *Server) updateCategories(ids []string, category domain.Category) []doma
 		updated = append(updated, s.lastEmails[i])
 	}
 	return updated
+}
+
+func normalizeIDs(ids []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func destructiveAction(action domain.BulkAction) bool {
+	return action == domain.ActionTrash || action == domain.ActionUnsubscribe
+}
+
+func requiresConfirmation(results []domain.ActionResult) bool {
+	for _, result := range results {
+		if result.Status == "needs_confirmation" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) staticHandler() http.Handler {

@@ -46,3 +46,28 @@ func TestUnsubscribeResultsPrepareReviewLinks(t *testing.T) {
 		t.Fatalf("unexpected results: %#v", results)
 	}
 }
+
+func TestPreviewUnsubscribeRequiresConfirmationForOneClick(t *testing.T) {
+	results := PreviewUnsubscribeResults([]domain.EmailSummary{{
+		ID:                 "1",
+		HasUnsubscribe:     true,
+		UnsubscribeTarget:  "https://example.com/unsubscribe",
+		UnsubscribeMethod:  "one_click_post",
+		CanAutoUnsubscribe: true,
+	}}, []string{"1"})
+	if len(results) != 1 || results[0].Status != "needs_confirmation" {
+		t.Fatalf("unexpected results: %#v", results)
+	}
+}
+
+func TestPreviewUnsubscribePreparesReviewLinks(t *testing.T) {
+	results := PreviewUnsubscribeResults([]domain.EmailSummary{{
+		ID:                "1",
+		HasUnsubscribe:    true,
+		UnsubscribeTarget: "mailto:unsubscribe@example.com",
+		UnsubscribeMethod: "mailto",
+	}}, []string{"1"})
+	if len(results) != 1 || results[0].Status != "prepared" || results[0].SafeLink == "" {
+		t.Fatalf("unexpected results: %#v", results)
+	}
+}

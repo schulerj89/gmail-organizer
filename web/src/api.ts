@@ -36,10 +36,10 @@ export async function updateCategories(ids: string[], category: string, applySen
   });
 }
 
-export async function runAction(action: "trash" | "mark_read" | "unsubscribe", ids: string[]) {
-  return request<{ results: ActionResult[] }>("/api/actions", {
+export async function runAction(action: "trash" | "mark_read" | "unsubscribe", ids: string[], confirm = false) {
+  return request<{ results: ActionResult[]; requiresConfirmation: boolean }>("/api/actions", {
     method: "POST",
-    body: JSON.stringify({ action, ids })
+    body: JSON.stringify({ action, ids, confirm })
   });
 }
 
