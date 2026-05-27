@@ -56,6 +56,14 @@ h1 {
   gap: 8px;
 }
 
+.status-cluster,
+.inline-toolset {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .status {
   align-items: center;
   background: #ecefed;
@@ -65,6 +73,12 @@ h1 {
   display: inline-flex;
   gap: 6px;
   padding: 7px 10px;
+}
+
+.tutorial-button {
+  background: #f8fbff;
+  border-color: #bed1df;
+  color: #215e91;
 }
 
 .status.active {
@@ -413,6 +427,67 @@ button:disabled {
   padding: 4px 8px;
 }
 
+.tour-backdrop {
+  background: rgba(13, 20, 25, 0.72);
+  inset: 0;
+  position: fixed;
+  z-index: 80;
+}
+
+.tour-highlight {
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 0 0 3px #f4ca64, 0 0 0 9999px rgba(13, 20, 25, 0.04);
+  isolation: isolate;
+  position: relative;
+  z-index: 90;
+}
+
+.tour-card {
+  background: #ffffff;
+  border: 1px solid #d7ddda;
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(13, 20, 25, 0.35);
+  color: #182026;
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+  padding: 18px;
+  position: fixed;
+  right: 24px;
+  top: 24px;
+  width: calc(100vw - 48px);
+  z-index: 100;
+}
+
+.tour-card > span {
+  color: #5d6970;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.tour-card h2 {
+  font-size: 18px;
+}
+
+.tour-card p {
+  color: #435057;
+  line-height: 1.5;
+}
+
+.tour-card div {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.tour-card button:last-child {
+  background: #1e684e;
+  border-color: #1e684e;
+  color: #ffffff;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     padding: 16px;
@@ -435,6 +510,13 @@ button:disabled {
   .query-group input:first-child {
     min-width: 0;
     width: 100%;
+  }
+
+  .tour-card {
+    left: 16px;
+    right: 16px;
+    top: 16px;
+    width: auto;
   }
 }
 

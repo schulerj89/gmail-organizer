@@ -15,6 +15,7 @@ This is the initial working slice. It includes:
 - Gmail OAuth URL and callback endpoints.
 - Gmail metadata fetch using `gmail.modify` scope.
 - Heuristic categorization and optional OpenAI Responses API categorization.
+- First-run guided dashboard tutorial with local browser storage for completed/skipped state and a restart control.
 - Dashboard lanes by category.
 - Per-lane stored totals and load controls for reviewing SQLite-backed category pages.
 - Explicit AI toggle for scan/monitor jobs with bounded backend AI classification chunks.
@@ -84,9 +85,19 @@ $env:OPENAI_CLASSIFY_CHUNK_SIZE="25"
 $env:OPENAI_TIMEOUT_SECONDS="45"
 ```
 
-## Screenshot
+## Screenshots
 
-![Dashboard screenshot](docs/screenshot.png)
+Dashboard overview:
+
+![Dashboard overview](docs/screenshot.png)
+
+Guided tutorial overlay:
+
+![Guided tutorial overlay](docs/screenshot-tutorial.png)
+
+Cleanup preview and confirmation:
+
+![Cleanup preview](docs/screenshot-cleanup-preview.png)
 
 ## Security Notes
 
@@ -118,4 +129,4 @@ npm run build
 npm audit --json
 ```
 
-The current dashboard screenshot was captured from a running local backend at `http://127.0.0.1:8787`.
+The current screenshots were captured from a running local backend at `http://127.0.0.1:8080`.

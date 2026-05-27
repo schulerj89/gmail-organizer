@@ -8,7 +8,7 @@ Build a secure, memory-efficient Gmail AI organizer that categorizes emails, mon
 
 - Backend: Go local HTTP API in `cmd/server` and `internal`.
 - Frontend: React/Vite app in `web`.
-- Dashboard: category lanes, per-lane stored totals/load controls, query/max controls, manual refresh, scan, monitoring toggle, AI categorize, manual category moves, bulk read, unsubscribe preparation, and trash.
+- Dashboard: first-run tutorial overlay with local browser completion/skipped state, restart tutorial control, category lanes, per-lane stored totals/load controls, query/max controls, manual refresh, scan, monitoring toggle, AI categorize, manual category moves, bulk read, unsubscribe preparation, and trash.
 - Persisted review state, sender rules, and action audit live in ignored SQLite database `data/review_state.db`; older JSON files are imported on first startup when the database is empty.
 - Review coverage stats are available at `/api/review` and shown in the dashboard.
 - Manual moves can save local sender rules that auto-categorize future messages from the same sender.
@@ -28,7 +28,7 @@ Build a secure, memory-efficient Gmail AI organizer that categorizes emails, mon
   - OpenAI key: `OPENAI_API_KEY_FILE`
 - Gmail token storage: `data/gmail_token.json` after OAuth.
 - Gmail OAuth can be started with `GMAIL_ORGANIZER_OAUTH_REDIRECT_URL=http://localhost:8080/oauth2callback` to match the local Google OAuth client redirect. While the OAuth consent screen is in testing mode, the signing account must be listed as a Google Cloud test user.
-- Verified live Gmail OAuth locally on `http://localhost:8080`, fetched 25 messages from `source=gmail`, ran the classification endpoint with AI enabled on that loaded batch, scanned 900 recent Gmail messages, imported 1,004 total stored classifications into SQLite, and verified cleanup previews without executing actions.
+- Verified live Gmail OAuth locally on `http://localhost:8080`, fetched 25 messages from `source=gmail`, ran the classification endpoint with AI enabled on that loaded batch, scanned 900 recent Gmail messages, imported 1,004 total stored classifications into SQLite, verified cleanup previews without executing actions, and captured short dashboard/tutorial/cleanup screenshots.
 
 ## Next Work
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Archive, Bot, Check, Database, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
+import { Archive, Bot, Check, CircleHelp, Database, MailCheck, MoveRight, RefreshCcw, Search, Shield, Trash2, Unlink, Wifi } from "lucide-react";
 import { classifyEmails, fetchConfig, fetchEmails, fetchMonitorStatus, fetchReviewEmails, fetchReviewStats, fetchScanStatus, getGoogleAuthURL, runAction, startMonitor, startScan, stopMonitor, stopScan, updateCategories } from "./api";
 import type { ActionResult, AppConfig, Category, EmailSummary, MonitorStatus, ReviewEmailPage, ReviewStats, ScanStatus } from "./types";
 import "./styles.css";
@@ -25,6 +25,61 @@ type PendingAction = {
   confirmationExpiresAt?: string;
 };
 
+const tutorialStorageKey = "gmail-organizer:tutorial";
+
+const tutorialSteps = [
+  {
+    target: "status",
+    title: "Connection status",
+    body: "These badges show whether Gmail and OpenAI are connected. The app stays local, but live mailbox cleanup needs Gmail authorized and AI features need the OpenAI key file available."
+  },
+  {
+    target: "query",
+    title: "Mailbox scope",
+    body: "The Gmail query chooses what mail to review, max controls the visible page size, and scan limit controls larger background coverage without keeping everything in browser memory."
+  },
+  {
+    target: "scan-monitor",
+    title: "Scan and monitor",
+    body: "Scan pages through Gmail metadata and persists classifications into SQLite. Monitor polls for incoming mail and classifies it into the same review state."
+  },
+  {
+    target: "categorize",
+    title: "Categorization",
+    body: "Categorize uses fast local rules. AI Categorize sends bounded metadata chunks through OpenAI for harder messages while keeping prompts, output tokens, and retries controlled."
+  },
+  {
+    target: "stored",
+    title: "Stored review pages",
+    body: "Stored reloads a category page from SQLite. Lane Load buttons do the same thing directly, which lets you work through cleanup pages without rescanning Gmail."
+  },
+  {
+    target: "coverage",
+    title: "Coverage totals",
+    body: "These counts come from SQLite, not just the visible page. They show total categorized mail, remaining needs-review items, manual moves, sender rules, and reviewed count."
+  },
+  {
+    target: "lane",
+    title: "Category lanes",
+    body: "Each lane shows visible emails and the stored total for that category. Click a card to select it, All selects the visible lane, and Load pulls that stored category page."
+  },
+  {
+    target: "move",
+    title: "Manual corrections",
+    body: "Move selected messages into the target category. Leave Sender enabled when future messages from that sender should automatically land in the same category."
+  },
+  {
+    target: "cleanup",
+    title: "Cleanup actions",
+    body: "Read marks selected messages read. Unsubscribe prepares safe review links or one-click requests. Trash moves selected messages to Gmail trash, not permanent delete."
+  },
+  {
+    target: "confirmation",
+    title: "Destructive confirmation",
+    body: "Trash and one-click unsubscribe preview first. If a cleanup could change Gmail or contact an unsubscribe endpoint, the app requires confirmation before it executes."
+  }
+];
+
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [emails, setEmails] = useState<EmailSummary[]>([]);
@@ -45,6 +100,7 @@ function App() {
   const [storedPage, setStoredPage] = useState<ReviewEmailPage | null>(null);
   const [actionResults, setActionResults] = useState<ActionResult[]>([]);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [tutorialStep, setTutorialStep] = useState<number | null>(null);
 
   useEffect(() => {
     void loadConfig();
@@ -52,6 +108,9 @@ function App() {
     void refreshMonitor();
     void refreshScan();
     void refreshReviewStats();
+    if (window.localStorage.getItem(tutorialStorageKey) !== "completed" && window.localStorage.getItem(tutorialStorageKey) !== "skipped") {
+      setTutorialStep(0);
+    }
   }, []);
 
   useEffect(() => {
@@ -73,6 +132,21 @@ function App() {
   }, [emails]);
 
   const selectedEmails = useMemo(() => emails.filter((email) => selected.has(email.id)), [emails, selected]);
+  const activeTutorialStep = tutorialStep === null ? null : tutorialSteps[tutorialStep];
+
+  useEffect(() => {
+    document.querySelectorAll(".tour-highlight").forEach((element) => element.classList.remove("tour-highlight"));
+    if (!activeTutorialStep) {
+      return;
+    }
+    const target = document.querySelector(`[data-tour="${activeTutorialStep.target}"]`);
+    if (!target) {
+      return;
+    }
+    target.classList.add("tour-highlight");
+    target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+    return () => target.classList.remove("tour-highlight");
+  }, [activeTutorialStep]);
 
   async function loadConfig() {
     setConfig(await fetchConfig());
@@ -297,6 +371,28 @@ function App() {
     });
   }
 
+  function restartTutorial() {
+    window.localStorage.removeItem(tutorialStorageKey);
+    setTutorialStep(0);
+  }
+
+  function skipTutorial() {
+    window.localStorage.setItem(tutorialStorageKey, "skipped");
+    setTutorialStep(null);
+  }
+
+  function nextTutorialStep() {
+    if (tutorialStep === null) {
+      return;
+    }
+    if (tutorialStep >= tutorialSteps.length - 1) {
+      window.localStorage.setItem(tutorialStorageKey, "completed");
+      setTutorialStep(null);
+      return;
+    }
+    setTutorialStep(tutorialStep + 1);
+  }
+
   return (
     <main className="app-shell">
       <section className="topbar">
@@ -305,29 +401,36 @@ function App() {
           <p>{sourceLabel(source)} - {emails.length} emails - {selected.size} selected</p>
         </div>
         <div className="status-row">
-          <Status label="Gmail" active={Boolean(config?.gmailAuthenticated)} />
-          <Status label="OpenAI" active={Boolean(config?.openAIKey.exists && config.openAIEnabled)} />
-          <Status label="Local" active />
+          <button className="tutorial-button" onClick={restartTutorial}><CircleHelp size={16} />Tutorial</button>
+          <span className="status-cluster" data-tour="status">
+            <Status label="Gmail" active={Boolean(config?.gmailAuthenticated)} />
+            <Status label="OpenAI" active={Boolean(config?.openAIKey.exists && config.openAIEnabled)} />
+            <Status label="Local" active />
+          </span>
         </div>
       </section>
 
       <section className="toolbar">
-        <div className="query-group">
+        <div className="query-group" data-tour="query">
           <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Gmail query" />
           <input className="max-input" type="number" min={1} max={200} value={max} onChange={(event) => setMax(Number(event.target.value))} aria-label="Max emails" />
           <input className="scan-input" type="number" min={100} max={10000} value={scanLimit} onChange={(event) => setScanLimit(Number(event.target.value))} aria-label="Scan limit" />
           <button onClick={loadEmails} disabled={busy}><RefreshCcw size={16} />Refresh</button>
-          <button className={scan?.running ? "monitoring" : ""} onClick={toggleScan} disabled={busy}><Search size={16} />Scan</button>
-          <button className={monitor?.running ? "monitoring" : ""} onClick={toggleMonitor} disabled={busy}><Wifi size={16} />Monitor</button>
-          <label className="inline-toggle">
-            <input type="checkbox" checked={useAIForJobs} onChange={(event) => setUseAIForJobs(event.target.checked)} />
-            AI jobs
-          </label>
+          <span className="inline-toolset" data-tour="scan-monitor">
+            <button className={scan?.running ? "monitoring" : ""} onClick={toggleScan} disabled={busy}><Search size={16} />Scan</button>
+            <button className={monitor?.running ? "monitoring" : ""} onClick={toggleMonitor} disabled={busy}><Wifi size={16} />Monitor</button>
+            <label className="inline-toggle">
+              <input type="checkbox" checked={useAIForJobs} onChange={(event) => setUseAIForJobs(event.target.checked)} />
+              AI jobs
+            </label>
+          </span>
           <button onClick={authorizeGmail}><Shield size={16} />Authorize</button>
         </div>
         <div className="action-group">
-          <button onClick={() => classify(false)} disabled={busy || emails.length === 0}><Archive size={16} />Categorize</button>
-          <button onClick={() => classify(true)} disabled={busy || emails.length === 0}><Bot size={16} />AI Categorize</button>
+          <span className="inline-toolset" data-tour="categorize">
+            <button onClick={() => classify(false)} disabled={busy || emails.length === 0}><Archive size={16} />Categorize</button>
+            <button onClick={() => classify(true)} disabled={busy || emails.length === 0}><Bot size={16} />AI Categorize</button>
+          </span>
           <select value={targetCategory} onChange={(event) => setTargetCategory(event.target.value as Category)} aria-label="Target category">
             {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
           </select>
@@ -335,14 +438,18 @@ function App() {
             <input type="checkbox" checked={applySenderRule} onChange={(event) => setApplySenderRule(event.target.checked)} />
             Sender
           </label>
-          <button onClick={moveSelected} disabled={busy || selected.size === 0}><MoveRight size={16} />Move</button>
-          <select value={storedCategory} onChange={(event) => setStoredCategory(event.target.value as Category)} aria-label="Stored category">
-            {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
-          </select>
-          <button onClick={() => loadStoredEmails()} disabled={busy}><Database size={16} />Stored</button>
-          <button onClick={() => bulk("mark_read")} disabled={busy}><MailCheck size={16} />Read</button>
-          <button onClick={() => bulk("unsubscribe")} disabled={busy}><Unlink size={16} />Unsubscribe</button>
-          <button className="danger" onClick={() => bulk("trash")} disabled={busy}><Trash2 size={16} />Trash</button>
+          <button data-tour="move" onClick={moveSelected} disabled={busy || selected.size === 0}><MoveRight size={16} />Move</button>
+          <span className="inline-toolset" data-tour="stored">
+            <select value={storedCategory} onChange={(event) => setStoredCategory(event.target.value as Category)} aria-label="Stored category">
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+            </select>
+            <button onClick={() => loadStoredEmails()} disabled={busy}><Database size={16} />Stored</button>
+          </span>
+          <span className="inline-toolset" data-tour="cleanup">
+            <button onClick={() => bulk("mark_read")} disabled={busy}><MailCheck size={16} />Read</button>
+            <button onClick={() => bulk("unsubscribe")} disabled={busy}><Unlink size={16} />Unsubscribe</button>
+            <button className="danger" onClick={() => bulk("trash")} disabled={busy}><Trash2 size={16} />Trash</button>
+          </span>
         </div>
       </section>
 
@@ -381,7 +488,7 @@ function App() {
       )}
 
       {reviewStats && (
-        <section className="coverage-panel">
+        <section className="coverage-panel" data-tour="coverage">
           <div>
             <span>Persisted review state</span>
             <strong>{reviewStats.total}</strong>
@@ -406,7 +513,7 @@ function App() {
       )}
 
       {actionResults.length > 0 && (
-        <section className="action-results">
+        <section className="action-results" data-tour="confirmation">
           {pendingAction && (
             <div className="confirm-row">
               <strong>{actionLabel(pendingAction.action)} pending</strong>
@@ -439,6 +546,7 @@ function App() {
             label={category.label}
             emails={grouped.get(category.id) ?? []}
             storedTotal={reviewStats?.byCategory[category.id] ?? 0}
+            tourTarget={category.id === "needs_review" ? "lane" : undefined}
             selected={selected}
             onToggle={toggle}
             onSelectAll={() => selectLane(category.id)}
@@ -449,6 +557,15 @@ function App() {
           />
         ))}
       </section>
+      {activeTutorialStep && (
+        <TutorialOverlay
+          step={activeTutorialStep}
+          index={tutorialStep ?? 0}
+          total={tutorialSteps.length}
+          onNext={nextTutorialStep}
+          onSkip={skipTutorial}
+        />
+      )}
     </main>
   );
 }
@@ -490,9 +607,26 @@ function actionLabel(action: "trash" | "mark_read" | "unsubscribe") {
   return "mark read";
 }
 
-function Lane({ label, emails, storedTotal, selected, onToggle, onSelectAll, onLoadStored }: { label: string; emails: EmailSummary[]; storedTotal: number; selected: Set<string>; onToggle: (id: string) => void; onSelectAll: () => void; onLoadStored: () => void }) {
+function TutorialOverlay({ step, index, total, onNext, onSkip }: { step: { title: string; body: string }; index: number; total: number; onNext: () => void; onSkip: () => void }) {
   return (
-    <div className="lane">
+    <>
+      <div className="tour-backdrop" />
+      <aside className="tour-card" role="dialog" aria-live="polite" aria-label="Dashboard tutorial">
+        <span>{index + 1} of {total}</span>
+        <h2>{step.title}</h2>
+        <p>{step.body}</p>
+        <div>
+          <button onClick={onSkip}>Skip</button>
+          <button onClick={onNext}>{index === total - 1 ? "Finish" : "Next"}</button>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function Lane({ label, emails, storedTotal, tourTarget, selected, onToggle, onSelectAll, onLoadStored }: { label: string; emails: EmailSummary[]; storedTotal: number; tourTarget?: string; selected: Set<string>; onToggle: (id: string) => void; onSelectAll: () => void; onLoadStored: () => void }) {
+  return (
+    <div className="lane" data-tour={tourTarget}>
       <header>
         <h2>{label}</h2>
         <div className="lane-actions">
