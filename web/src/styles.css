@@ -734,7 +734,7 @@ button:disabled {
   max-height: calc(100vh - 48px);
   max-width: 720px;
   min-height: 420px;
-  overflow: hidden;
+  overflow-y: auto;
   width: min(720px, calc(100vw - 48px));
 }
 
@@ -850,6 +850,33 @@ button:disabled {
 .detail-section p {
   color: #435057;
   line-height: 1.5;
+}
+
+.decision-panel {
+  border-bottom: 1px solid #edf0ee;
+  display: grid;
+  gap: 10px;
+  margin: 0 18px;
+  padding: 16px 0;
+}
+
+.decision-panel h3 {
+  font-size: 13px;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.decision-panel p {
+  color: #435057;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.decision-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .detail-grid {
@@ -1153,5 +1180,10 @@ button:disabled {
 
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .decision-controls {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

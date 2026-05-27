@@ -425,13 +425,17 @@ function App() {
       setNotice("Select at least one email first.");
       return;
     }
+    await moveEmails(ids, targetCategory, applySenderRule);
+  }
+
+  async function moveEmails(ids: string[], category: Category, applyRule: boolean) {
     setBusy(true);
     try {
-      const result = await updateCategories(ids, targetCategory, applySenderRule);
+      const result = await updateCategories(ids, category, applyRule);
       setEmails(result.emails);
-      setSelected(new Set());
+      setSelected((current) => new Set(Array.from(current).filter((id) => !ids.includes(id))));
       await refreshReviewStats();
-      setNotice(`${ids.length} email(s) moved to ${categoryLabel(targetCategory)}.${applySenderRule ? " Sender rule saved." : ""}`);
+      setNotice(`${ids.length} email(s) moved to ${categoryLabel(category)}.${applyRule ? " Future emails from this sender will follow that category." : ""}`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Category update failed.");
     } finally {
@@ -682,8 +686,13 @@ function App() {
         <EmailDetailModal
           email={detailEmail}
           selected={selected.has(detailEmail.id)}
+          categories={categories}
           onClose={() => setDetailEmailId(null)}
           onToggle={() => toggle(detailEmail.id)}
+          onMove={async (category, applyRule) => {
+            await moveEmails([detailEmail.id], category, applyRule);
+            setDetailEmailId(null);
+          }}
           onMarkRead={() => bulk("mark_read", [detailEmail.id])}
           onUnsubscribe={() => bulk("unsubscribe", [detailEmail.id])}
           onTrash={() => bulk("trash", [detailEmail.id])}
@@ -917,7 +926,10 @@ function SenderGroupList({ groups, selected, onSelect, onPreviewUnsubscribe, onP
   );
 }
 
-function EmailDetailModal({ email, selected, onClose, onToggle, onMarkRead, onUnsubscribe, onTrash }: { email: EmailSummary; selected: boolean; onClose: () => void; onToggle: () => void; onMarkRead: () => void; onUnsubscribe: () => void; onTrash: () => void }) {
+function EmailDetailModal({ email, selected, categories, onClose, onToggle, onMove, onMarkRead, onUnsubscribe, onTrash }: { email: EmailSummary; selected: boolean; categories: { id: Category; label: string }[]; onClose: () => void; onToggle: () => void; onMove: (category: Category, applyRule: boolean) => Promise<void>; onMarkRead: () => void; onUnsubscribe: () => void; onTrash: () => void }) {
+  const [decisionCategory, setDecisionCategory] = useState<Category>(email.category === "needs_review" ? "promotions" : email.category);
+  const [applyRule, setApplyRule] = useState(true);
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -927,6 +939,11 @@ function EmailDetailModal({ email, selected, onClose, onToggle, onMarkRead, onUn
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
+
+  useEffect(() => {
+    setDecisionCategory(email.category === "needs_review" ? "promotions" : email.category);
+    setApplyRule(true);
+  }, [email.id, email.category]);
 
   return (
     <div className="detail-backdrop" role="presentation" onMouseDown={onClose}>
@@ -948,6 +965,23 @@ function EmailDetailModal({ email, selected, onClose, onToggle, onMarkRead, onUn
         <section className="detail-section">
           <h3>Why it is here</h3>
           <p>{email.reason || "No classification reason was recorded."}</p>
+        </section>
+
+        <section className="decision-panel">
+          <div>
+            <h3>Review decision</h3>
+            <p>Choose the category this email should use. Saving a sender rule helps future emails from this sender land in the same place.</p>
+          </div>
+          <div className="decision-controls">
+            <select value={decisionCategory} onChange={(event) => setDecisionCategory(event.target.value as Category)} aria-label="Decision category">
+              {categories.filter((category) => category.id !== "needs_review").map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+            </select>
+            <label className="inline-toggle">
+              <input type="checkbox" checked={applyRule} onChange={(event) => setApplyRule(event.target.checked)} />
+              Apply to future emails
+            </label>
+            <button onClick={() => void onMove(decisionCategory, applyRule)}><MoveRight size={16} />Move to category</button>
+          </div>
         </section>
 
         <section className="detail-grid">

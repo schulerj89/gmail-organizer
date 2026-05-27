@@ -15,3 +15,7 @@ Show bulk cleanup actions in a sticky selection bar only after at least one mess
 ## 2026-05-27: Preview Confirmation Modal
 
 Show unsubscribe and move-to-trash previews in a modal instead of an inline page panel. The modal is the third step in the cleanup flow and should include the affected count, risk note, representative results, and confirm/cancel actions.
+
+## 2026-05-27: Review Decision Modal
+
+Put category correction inside the email detail modal. The user should be able to open one uncertain message, choose a category, optionally save a sender rule, and return to the queue with the item resolved.

@@ -20,6 +20,7 @@ This is the initial working slice. It includes:
 - Quick cleanup queues for unsubscribe-ready messages and suggested cleanup candidates.
 - Sender cleanup queue that groups unsubscribe-ready messages by sender for faster bulk review.
 - Email detail dialog with sender, subject, snippet, category reason, unsubscribe availability, and single-message actions.
+- Review decision controls in the email detail dialog for correcting category and applying future sender rules.
 - Contextual bulk action bar that appears only after selecting emails.
 - Modal preview and confirmation flow for unsubscribe and move-to-trash actions.
 - Saved category totals and left-nav category loading for SQLite-backed review pages.
@@ -104,6 +105,10 @@ Guided tutorial overlay:
 Cleanup preview and confirmation:
 
 ![Cleanup preview](docs/screenshot-cleanup-preview.png)
+
+Review decision modal:
+
+![Review decision modal](docs/screenshot-review-decision.png)
 
 ## Security Notes
 

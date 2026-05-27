@@ -81,3 +81,5 @@ Quick cleanup queues now sit above saved categories in the left nav. They suppor
 Cleanup previews and confirmations are shown in a modal workflow instead of an inline panel. This keeps destructive or external-contacting actions focused, preserves the existing backend confirmation token safety model, and makes unsubscribe/delete feel like a guided flow.
 
 Sender cleanup groups unsubscribe-ready emails by sender entirely in the frontend for the first pass. This supports a faster bulk unsubscribe workflow without changing the backend: pick Sender cleanup, select or preview a sender group, then confirm unsubscribe or trash.
+
+Review decisions live inside the email detail dialog. A user can open a message, pick the right category, optionally apply the decision to future emails from that sender, and move it out of Review needed without leaving the modal.
