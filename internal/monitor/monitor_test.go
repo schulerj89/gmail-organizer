@@ -9,12 +9,21 @@ import (
 	"github.com/schulerj89/gmail-organizer/internal/domain"
 )
 
-func TestBoundedMergeKeepsNewestUniqueEmails(t *testing.T) {
-	existing := []domain.EmailSummary{{ID: "old-1"}, {ID: "shared"}, {ID: "old-2"}}
-	incoming := []domain.EmailSummary{{ID: "new-1"}, {ID: "shared"}, {ID: "new-2"}}
+func TestServiceKeepsNewestUniqueCachedEmails(t *testing.T) {
+	calls := 0
+	service := NewService(func(_ context.Context, _ string, _ int64, _ bool) ([]domain.EmailSummary, string, error) {
+		calls++
+		if calls == 1 {
+			return []domain.EmailSummary{{ID: "old-1"}, {ID: "shared"}, {ID: "old-2"}}, "test", nil
+		}
+		return []domain.EmailSummary{{ID: "new-1"}, {ID: "shared"}, {ID: "new-2"}}, "test", nil
+	}, time.Minute, 50)
+	service.cacheLimit = 4
 
-	got := boundedMerge(existing, incoming, 4)
+	service.poll(context.Background())
+	service.poll(context.Background())
 
+	got := service.Status().Emails
 	want := []string{"new-1", "shared", "new-2", "old-1"}
 	if len(got) != len(want) {
 		t.Fatalf("expected %d emails, got %d", len(want), len(got))

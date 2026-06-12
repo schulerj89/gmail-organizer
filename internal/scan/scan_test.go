@@ -41,20 +41,6 @@ func TestServiceScansPagesUntilLimit(t *testing.T) {
 	}
 }
 
-func TestBoundedMergeDedupesAndLimits(t *testing.T) {
-	got := boundedMerge(
-		[]domain.EmailSummary{{ID: "old-1"}, {ID: "shared"}},
-		[]domain.EmailSummary{{ID: "new-1"}, {ID: "shared"}, {ID: "new-2"}},
-		3,
-	)
-	want := []string{"new-1", "shared", "new-2"}
-	for i, id := range want {
-		if got[i].ID != id {
-			t.Fatalf("index %d expected %s, got %s", i, id, got[i].ID)
-		}
-	}
-}
-
 func waitFor(t *testing.T, done func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

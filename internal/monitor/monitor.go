@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/schulerj89/gmail-organizer/internal/domain"
+	"github.com/schulerj89/gmail-organizer/internal/emailcache"
 )
 
 type PollFunc func(ctx context.Context, query string, max int64, useAI bool) ([]domain.EmailSummary, string, error)
@@ -148,42 +149,7 @@ func (s *Service) poll(ctx context.Context) {
 	s.source = source
 	s.lastErr = ""
 	s.lastOK = now
-	s.cache = boundedMerge(s.cache, emails, s.cacheLimit)
-}
-
-func boundedMerge(existing []domain.EmailSummary, incoming []domain.EmailSummary, limit int) []domain.EmailSummary {
-	if limit <= 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(existing)+len(incoming))
-	merged := make([]domain.EmailSummary, 0, minInt(limit, len(existing)+len(incoming)))
-	for _, email := range incoming {
-		if email.ID == "" {
-			continue
-		}
-		if _, ok := seen[email.ID]; ok {
-			continue
-		}
-		seen[email.ID] = struct{}{}
-		merged = append(merged, email)
-		if len(merged) == limit {
-			return merged
-		}
-	}
-	for _, email := range existing {
-		if email.ID == "" {
-			continue
-		}
-		if _, ok := seen[email.ID]; ok {
-			continue
-		}
-		seen[email.ID] = struct{}{}
-		merged = append(merged, email)
-		if len(merged) == limit {
-			return merged
-		}
-	}
-	return merged
+	s.cache = emailcache.MergeNewestUnique(s.cache, emails, s.cacheLimit)
 }
 
 func defaultString(value string, fallback string) string {
@@ -211,13 +177,6 @@ func timePtr(value time.Time) *time.Time {
 }
 
 func minDuration(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func minInt(a, b int) int {
 	if a < b {
 		return a
 	}

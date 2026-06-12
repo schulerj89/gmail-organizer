@@ -466,10 +466,7 @@ func (s *Server) snapshot() []domain.EmailSummary {
 }
 
 func (s *Server) forget(ids []string) {
-	selected := map[string]struct{}{}
-	for _, id := range ids {
-		selected[id] = struct{}{}
-	}
+	selected := idSet(ids)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	kept := s.lastEmails[:0]
@@ -483,10 +480,7 @@ func (s *Server) forget(ids []string) {
 }
 
 func (s *Server) updateCategories(ids []string, category domain.Category) []domain.EmailSummary {
-	selected := map[string]struct{}{}
-	for _, id := range ids {
-		selected[id] = struct{}{}
-	}
+	selected := idSet(ids)
 	updated := []domain.EmailSummary{}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -500,6 +494,14 @@ func (s *Server) updateCategories(ids []string, category domain.Category) []doma
 		updated = append(updated, s.lastEmails[i])
 	}
 	return updated
+}
+
+func idSet(ids []string) map[string]struct{} {
+	selected := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		selected[id] = struct{}{}
+	}
+	return selected
 }
 
 func normalizeIDs(ids []string) []string {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/schulerj89/gmail-organizer/internal/domain"
+	"github.com/schulerj89/gmail-organizer/internal/emailcache"
 )
 
 type FetchPageFunc func(ctx context.Context, query string, pageToken string, batchSize int64, useAI bool) ([]domain.EmailSummary, string, string, error)
@@ -185,48 +186,13 @@ func (s *Service) recordBatch(emails []domain.EmailSummary, nextToken string, so
 	s.total += len(emails)
 	s.source = source
 	s.nextToken = nextToken
-	s.cache = boundedMerge(s.cache, emails, s.cacheLimit)
+	s.cache = emailcache.MergeNewestUnique(s.cache, emails, s.cacheLimit)
 }
 
 func (s *Service) recordError(message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lastErr = message
-}
-
-func boundedMerge(existing []domain.EmailSummary, incoming []domain.EmailSummary, limit int) []domain.EmailSummary {
-	if limit <= 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(existing)+len(incoming))
-	merged := make([]domain.EmailSummary, 0, minInt(limit, len(existing)+len(incoming)))
-	for _, email := range incoming {
-		if email.ID == "" {
-			continue
-		}
-		if _, ok := seen[email.ID]; ok {
-			continue
-		}
-		seen[email.ID] = struct{}{}
-		merged = append(merged, email)
-		if len(merged) == limit {
-			return merged
-		}
-	}
-	for _, email := range existing {
-		if email.ID == "" {
-			continue
-		}
-		if _, ok := seen[email.ID]; ok {
-			continue
-		}
-		seen[email.ID] = struct{}{}
-		merged = append(merged, email)
-		if len(merged) == limit {
-			return merged
-		}
-	}
-	return merged
 }
 
 func defaultString(value string, fallback string) string {
@@ -261,11 +227,4 @@ func timePtr(value time.Time) *time.Time {
 		return nil
 	}
 	return &value
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
