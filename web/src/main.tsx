@@ -74,6 +74,7 @@ const dateFilters: { id: DateFilterId; label: string; query?: string; operator?:
 const tutorialStorageKey = "gmail-organizer:tutorial";
 const themeStorageKey = "gmail-organizer:theme";
 const aiSuggestionThreshold = 0.75;
+const cleanupCategories = new Set<Category>(["promotions", "newsletters", "unwanted"]);
 
 const tutorialSteps: TutorialStep[] = [
   {
@@ -200,21 +201,23 @@ function App() {
   const selectedEmails = useMemo(() => emails.filter((email) => selected.has(email.id)), [emails, selected]);
   const senderGroups = useMemo(() => buildSenderGroups(emails), [emails]);
   const aiSuggestedEmails = useMemo(() => emails.filter((email) => email.category !== "needs_review" && email.confidence >= aiSuggestionThreshold), [emails]);
+  const unsubscribeEmails = useMemo(() => emails.filter((email) => email.hasUnsubscribe), [emails]);
+  const cleanupEmails = useMemo(() => emails.filter((email) => cleanupCategories.has(email.category)), [emails]);
   const visibleEmails = useMemo(() => {
     if (queueMode === "ai") {
       return aiSuggestedEmails;
     }
     if (queueMode === "unsubscribe") {
-      return emails.filter((email) => email.hasUnsubscribe);
+      return unsubscribeEmails;
     }
     if (queueMode === "cleanup") {
-      return emails.filter((email) => ["promotions", "newsletters", "unwanted"].includes(email.category));
+      return cleanupEmails;
     }
     if (source === "review_store") {
       return emails;
     }
     return emails.filter((email) => email.category === activeCategory);
-  }, [activeCategory, aiSuggestedEmails, emails, queueMode, source]);
+  }, [activeCategory, aiSuggestedEmails, cleanupEmails, emails, queueMode, source, unsubscribeEmails]);
   const activeQueueTitle = queueMode === "ai" ? "AI suggestions" : queueMode === "senders" ? "Sender cleanup" : queueMode === "unsubscribe" ? "Ready to unsubscribe" : queueMode === "cleanup" ? "Suggested cleanup" : categoryLabel(activeCategory);
   const detailEmail = useMemo(() => emails.find((email) => email.id === detailEmailId) ?? null, [detailEmailId, emails]);
   const activeQuery = useMemo(() => buildGmailQuery(dateFilter, customDate, query), [dateFilter, customDate, query]);
@@ -474,7 +477,7 @@ function App() {
     if (action === "trash") {
       const trashed = new Set(results.filter((item) => item.status === "trashed").map((item) => item.emailId));
       setEmails((current) => current.filter((email) => !trashed.has(email.id) && !(summary.succeeded > 0 && senderKey && senderAddress(email.from) === senderKey)));
-      setSelected((current) => new Set(Array.from(current).filter((id) => !trashed.has(id))));
+      setSelected((current) => withoutIDs(current, trashed));
       if (detailEmailId && trashed.has(detailEmailId)) {
         setDetailEmailId(null);
       }
@@ -496,7 +499,7 @@ function App() {
     try {
       const result = await updateCategories(ids, category, applyRule);
       setEmails(result.emails);
-      setSelected((current) => new Set(Array.from(current).filter((id) => !ids.includes(id))));
+      setSelected((current) => withoutIDs(current, ids));
       await refreshReviewStats();
       setNotice(`${ids.length} email(s) moved to ${categoryLabel(category)}.${applyRule ? " Future emails from this sender will follow that category." : ""}`);
     } catch (error) {
@@ -524,7 +527,7 @@ function App() {
         latest = result.emails;
       }
       setEmails(latest);
-      setSelected((current) => new Set(Array.from(current).filter((id) => !ids.includes(id))));
+      setSelected((current) => withoutIDs(current, ids));
       await refreshReviewStats();
       setNotice(`${selectedSuggestions.length} AI suggestion(s) accepted across ${byCategory.size} categor${byCategory.size === 1 ? "y" : "ies"}.`);
     } catch (error) {
@@ -650,7 +653,7 @@ function App() {
           <>
             <Metric label="Saved emails" value={reviewStats.total} />
             <Metric label="Review needed" value={reviewStats.needsReview} />
-            <Metric label="Can unsubscribe" value={emails.filter((email) => email.hasUnsubscribe).length} />
+            <Metric label="Can unsubscribe" value={unsubscribeEmails.length} />
             <Metric label="Cleaned up" value={Math.max(0, reviewStats.total - reviewStats.needsReview)} />
           </>
         )}
@@ -669,7 +672,7 @@ function App() {
             }}
           >
             <span>Ready to unsubscribe</span>
-            <span>{emails.filter((email) => email.hasUnsubscribe).length}</span>
+            <span>{unsubscribeEmails.length}</span>
           </button>
           <button
             className={queueMode === "senders" ? "nav-item active" : "nav-item"}
@@ -699,7 +702,7 @@ function App() {
             }}
           >
             <span>Suggested cleanup</span>
-            <span>{emails.filter((email) => ["promotions", "newsletters", "unwanted"].includes(email.category)).length}</span>
+            <span>{cleanupEmails.length}</span>
           </button>
           <div className="workflow-hint">
             <strong>3-step cleanup</strong>
@@ -729,7 +732,7 @@ function App() {
           <header className="workbench-header">
             <div>
               <h2>{activeQueueTitle}</h2>
-              <p>{queueMode === "ai" ? `${aiSuggestedEmails.length} high-confidence suggestions ready to accept or inspect` : queueMode === "senders" ? `${senderGroups.length} senders - ${emails.filter((email) => email.hasUnsubscribe).length} unsubscribe-ready messages` : `${visibleEmails.length} visible - ${queueMode === "category" ? `${reviewStats?.byCategory[activeCategory] ?? 0} saved - ` : ""}${sourceLabel(source)}`}</p>
+              <p>{queueMode === "ai" ? `${aiSuggestedEmails.length} high-confidence suggestions ready to accept or inspect` : queueMode === "senders" ? `${senderGroups.length} senders - ${unsubscribeEmails.length} unsubscribe-ready messages` : `${visibleEmails.length} visible - ${queueMode === "category" ? `${reviewStats?.byCategory[activeCategory] ?? 0} saved - ` : ""}${sourceLabel(source)}`}</p>
             </div>
             <div className="workbench-actions" data-tour="categorize">
               <button onClick={() => classify(false)} disabled={busy || emails.length === 0} title="Sort loaded emails with local rules"><Archive size={16} />Sort Emails</button>
@@ -850,6 +853,11 @@ function Metric({ label, value }: { label: string; value: number }) {
 
 function categoryLabel(category: Category) {
   return categories.find((item) => item.id === category)?.label ?? category;
+}
+
+function withoutIDs(selected: Set<string>, ids: Iterable<string>) {
+  const removed = new Set(ids);
+  return new Set(Array.from(selected).filter((id) => !removed.has(id)));
 }
 
 function localDateInputValue() {

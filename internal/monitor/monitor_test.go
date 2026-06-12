@@ -43,7 +43,7 @@ func TestServiceStartsPollsAndStops(t *testing.T) {
 	}, 15*time.Second, 50)
 
 	service.Start(context.Background(), Options{Query: "newer_than:1d", Max: 10})
-	time.Sleep(25 * time.Millisecond)
+	waitFor(t, func() bool { return service.Status().CacheSize == 1 })
 	service.Stop()
 
 	status := service.Status()
@@ -56,4 +56,16 @@ func TestServiceStartsPollsAndStops(t *testing.T) {
 	if status.Source != "test" {
 		t.Fatalf("expected source test, got %s", status.Source)
 	}
+}
+
+func waitFor(t *testing.T, done func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if done() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("condition timed out")
 }
