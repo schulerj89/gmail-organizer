@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible problem in Gmail Organizer
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Gmail Organizer. Do not include real email content, OAuth credentials, tokens, API keys, or local database files.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Start the app with...
+        2. Open...
+        3. Select...
+        4. Observe...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: data-source
+    attributes:
+      label: Data source
+      options:
+        - Demo data
+        - Connected Gmail account
+        - Both
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, browser, Go version, and Node.js version.
+      placeholder: Windows 11, Chrome 138, Go 1.25, Node.js 24
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Remove addresses, message content, tokens, file paths, and other private data.
+
+  - type: checkboxes
+    id: security
+    attributes:
+      label: Security check
+      options:
+        - label: This report does not expose a vulnerability or private information. Security issues belong in private vulnerability reporting.
+          required: true
